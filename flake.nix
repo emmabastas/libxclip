@@ -29,6 +29,7 @@
           devShells.default = pkgs.mkShell {
             buildInputs = with pkgs; [
               gcc
+              pkg-config
               autoconf
               automake
               xorg.xorgproto
