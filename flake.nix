@@ -30,11 +30,10 @@
             buildInputs = with pkgs; [
               gcc
               pkg-config
-              autoconf
-              automake
               xorg.xorgproto
               xorg.libX11
               xorg.libXmu
+              xclip
             ];
           };
         }
