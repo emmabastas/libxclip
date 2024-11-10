@@ -1,9 +1,10 @@
+#include "libxclip.h"
+
 #include <stdlib.h>
-#include <unistd.h>
 #include <assert.h>
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
-#include <X11/Xmu/Atoms.h>
+#include <X11/Xmu/Atoms.h> // TODO remove this an use XInternAtom instead
 
 #define DEBUG
 
@@ -108,7 +109,7 @@ void xclipboard_respond(XEvent request, Atom property) {
     // TODO what errors can this generate?
 }
 
-pid_t xclipboard_persist(Display *display, char *data, size_t len) {
+pid_t libxclip_put(Display *display, char *data, size_t len) {
     // Determine chunk_size
     // In the case that the selections contents is very large we may
     // have to send the clipboard selection in multiple chunks,
@@ -343,11 +344,4 @@ pid_t xclipboard_persist(Display *display, char *data, size_t len) {
     // commes from the child process. The statement is only here to have the compiler
     // not complain.
     return pid;
-}
-
-int main(void) {
-    char *data = "Hello! :-)";
-    Display *display = XOpenDisplay(NULL);
-    xclipboard_persist(display, data, strlen(data));
-    return 0;
 }
