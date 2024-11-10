@@ -1,5 +1,5 @@
 #include <stdlib.h>
-#include <ctype.h>
+#include <unistd.h>
 #include <assert.h>
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
@@ -108,7 +108,7 @@ void xclipboard_respond(XEvent request, Atom property) {
     // TODO what errors can this generate?
 }
 
-void xclipboard_persist(Display *display, char *data, size_t len) {
+pid_t xclipboard_persist(Display *display, char *data, size_t len) {
     // Determine chunk_size
     // In the case that the selections contents is very large we may
     // have to send the clipboard selection in multiple chunks,
@@ -116,6 +116,7 @@ void xclipboard_persist(Display *display, char *data, size_t len) {
     //
     // We consider selections larger than a quarter of the maximum
     // request size to be "large". See ICCCM section 2.5
+    // FIXME: I think the chunk_size should be ~16x the size of what we currently do
     //
     // First see if X supports extended-length encoding, it returns 0 if not
     size_t chunk_size = XExtendedMaxRequestSize(display) / 4;
@@ -133,11 +134,12 @@ void xclipboard_persist(Display *display, char *data, size_t len) {
     // `SelectionRequest` events from other windows
     // FIXME: Should not use CurrentTime, according to ICCCM section 2.1
     XSetSelectionOwner(display, XA_CLIPBOARD(display), window, CurrentTime);
-    // TODO: What error can this generate?
+    // TODO: What errorrs can this generate?
 
     // Double-check SetSelectionOwner did not "merely appear to succeed"
     if (XGetSelectionOwner(display, XA_CLIPBOARD(display)) != window) {
         assert(False);
+        // TODO handle error
     }
     // TODO: Can XGetSelectionOwner generate an error.
 
@@ -145,7 +147,42 @@ void xclipboard_persist(Display *display, char *data, size_t len) {
     // TODO: XSelectInput() can generate a BadWindow error.
     // https://tronche.com/gui/x/xlib/event-handling/XSelectInput.html
 
-    XStoreBuffer(display, data, len, 0);
+    // Now it's time to create a separate process that hangs around waiting for other
+    // programs to make selection requests.
+    //
+    // NB. The selections contents are stored in `data` and the child process will of
+    // course read from this. What happens though in the case that the parent process
+    // exits before the child process is finished? One might think that all data all-
+    // ocated by the parent process is freed, including what `data` points to. This
+    // is true in some sense, but `fork` performs a copy-on-write duplication on all
+    // of the heap contents from the parent process to the child process. This means:
+    // 1) If the parent process never writes to `data` after having called
+    //    `xlipboard_persit` then no copies are made of that data, yet the child
+    //    process still has acess to it after the parent process exited. AWESOME!
+    // 2) If the parent process does write then the `data` is copied, and the child
+    //    process will continue to acess the original contents.
+    // See: https://unix.stackexchange.com/questions/155017/does-fork-immediately-copy-the-entire-process-heap-in-linux
+    // THAT'S SO COOL
+
+    pid_t pid = fork();
+    if (pid != 0) {
+        // I don't understand how this works; In my mind, we make this function call
+        // we tell the X11 server that no one owns the clipboard any more, but this
+        // line is included in `xclip` when they fork, and it works.. and it works
+        // here to, but why??
+        XSetSelectionOwner(display, XA_CLIPBOARD(display), None, CurrentTime);
+        // TODO: What errors can this generate?
+        return pid;
+    }
+
+    // Move into root, so that we don't cause any problems in case the directory
+    // we're currently in needs to be unmounted
+    int sucess = chdir("/");
+    if (sucess == -1) {
+        #ifdef DEBUG
+        printf("Failed to move child process into root directory!?\n");
+        #endif
+    }
 
     XEvent event;
     while (True) {
@@ -159,6 +196,7 @@ void xclipboard_persist(Display *display, char *data, size_t len) {
             printf("Got a SelectionClear\n");
             #endif
             // TODO
+            return 0;
         }
 
         int target;
@@ -282,30 +320,34 @@ void xclipboard_persist(Display *display, char *data, size_t len) {
             continue;
         }
 
-        assert(False);
+        #ifdef DEBUG
+        const char *evtstr[36] = {
+            "ProtocolError", "ProtocolReply", "KeyPress", "KeyRelease",
+            "ButtonPress", "ButtonRelease", "MotionNotify", "EnterNotify",
+            "LeaveNotify", "FocusIn", "FocusOut", "KeymapNotify", "Expose",
+            "GraphicsExpose", "NoExpose", "VisibilityNotify", "CreateNotify",
+            "DestroyNotify", "UnmapNotify", "MapNotify", "MapRequest",
+            "ReparentNotify", "ConfigureNotify", "ConfigureRequest",
+            "GravityNotify", "ResizeRequest", "CirculateNotify",
+            "CirculateRequest", "PropertyNotify", "SelectionClear",
+            "SelectionRequest", "SelectionNotify", "ColormapNotify",
+            "ClientMessage", "MappingNotify", "GenericEvent", };
+        printf("We got an unexpected %s event\n", evtstr[event.type]);
+        #endif
     }
 
     // Let everyone know that we're no longer taking care of the selection
     XSetSelectionOwner(display, XA_CLIPBOARD(display), None, CurrentTime);
 
-    return;
-}
-
-int xerror_handler(Display *display, XErrorEvent *error) {
-    fprintf(stderr, "ERROR!!!\n");
-    return 0;
-}
-
-int xerror_handler_fatal(Display *display) {
-    fprintf(stderr, "ERROR!!!\n");
-    return 0;
+    // This return statement doesn't do anything meaningfull, because this return
+    // commes from the child process. The statement is only here to have the compiler
+    // not complain.
+    return pid;
 }
 
 int main(void) {
-    XSetErrorHandler(&xerror_handler);
-    XSetIOErrorHandler(&xerror_handler_fatal);
-    XOpenDisplay("kajdshakjds hha");
     char *data = "Hello! :-)";
     Display *display = XOpenDisplay(NULL);
     xclipboard_persist(display, data, strlen(data));
+    return 0;
 }
