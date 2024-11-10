@@ -11,47 +11,32 @@
 #include <stdio.h>
 #endif
 
-enum RequestorContext {
-    CTX_NONE         = 0,
-    CTX_SENT_REQUEST = 1,
-    CTX_TRANSFERING  = 2,
-    CTX_BAD_TARGET   = 3,
+enum TransferState {
+    STATE_NONE         = 0,
+    STATE_SENT_REQUEST = 1,
+    STATE_TRANSFERING  = 2,
+    STATE_BAD_TARGET   = 3,
 };
 
-// This data structure represents some other program that is in the process
-// of talking to us, maybe it requested the selection, and maybe we have to
-// send it in chunks to them for instance.
-typedef struct requestor
+// The selection we hold may be so large we have to transfer it in chunks, in which
+// case we have to keep track of our ongoing transfers. We do this with this struct,
+// which forms a linked list
+struct transfer
 {
-    // Every requestor has a display and a window associated with them,
-    // this is what we'll use to associate specific events to a requestor
-    Display *display; // TODO: display is probably superflous
-    Window window;
+    // The window associated with the requestor, this should be all that's needed
+    // to uniquely identify a requestor
+    Window requestor_window;
+    enum TransferState state;
+    struct transfer *next;
+};
 
-    // This represents what our
-    enum RequestorContext context;
-
-    // unsigned long sel_pos;?
-    // int finished;?
-
-    // In the case that the selection contents are too large to send in one
-    // go we need to send them in chuks, whose size is determined by this
-    // field
-    long chunk_size;
-
-    // We let all of our requestors form a linked list
-    struct requestor *next;
-} REQUESTOR;
-
-static struct requestor *first_requestor = NULL;
-
-struct requestor *get_requestor(Display *display, Window window) {
-    struct requestor *current = first_requestor;
+struct transfer *get_transfer(struct transfer **first_transfer, Window requestor_window) {
+    struct transfer *current = *first_transfer;
 
     while (current != NULL) {
-        if (current->display == display && current->window == window) {
+        if (current->requestor_window == requestor_window) {
             #ifdef DEBUG
-            printf("get_requestor: found an existing requestor with display: %p and window: %ld\n", display, window);
+            printf("get_transfer: found an existing requestor with window: %ld\n", requestor_window);
             #endif
 
             return current;
@@ -60,18 +45,37 @@ struct requestor *get_requestor(Display *display, Window window) {
     }
 
     #ifdef DEBUG
-    printf("get_requestor: Regestering a new requestor with dsplay: %p and window: %ld\n", display, window);
+    printf("get_transfer_state: Regestering a new requestor with window: %ld\n", requestor_window);
     #endif
 
-    // We have met a new requestor, and so we create an entry for them!
-    struct requestor *new_requestor = malloc(sizeof(struct requestor));
-    new_requestor->display = display;
-    new_requestor->window = window;
-    new_requestor->context = CTX_NONE;
-    new_requestor->next = first_requestor;
-    first_requestor = new_requestor;
+    struct transfer *new_transfer = malloc(sizeof(struct transfer));
+    new_transfer->requestor_window = requestor_window;
+    new_transfer->state = STATE_NONE;
+    new_transfer->next = *first_transfer;
+    *first_transfer = new_transfer;
 
-    return first_requestor;
+    return *first_transfer;
+}
+
+void delete_transfer(struct transfer **first_transfer, struct transfer *transfer) {
+    if ((*first_transfer)->requestor_window == transfer->requestor_window) {
+        free(*first_transfer);
+        *first_transfer = NULL;
+    }
+
+    struct transfer *past = NULL;
+    struct transfer *current = *first_transfer;
+    while (current != NULL) {
+        if (current->requestor_window == transfer->requestor_window) {
+            past->next = current->next;
+            free(current);
+            return;
+        }
+        past = current;
+        current = current->next;
+    }
+
+    assert(False);
 }
 
 void xclipboard_respond(XEvent request, Atom property) {
@@ -182,9 +186,6 @@ void xclipboard_persist(Display *display, char *data, size_t len) {
             printf("Got a selection request with target = TARGETS\n");
             #endif
 
-            int requestor_window = event.xselectionrequest.requestor;
-            // this registers the requestor if it's not already registered
-            get_requestor(display, requestor_window);
             /* FIXME: ICCCM 2.2: check evt.time and refuse requests from
              * outside the period of time we have owned the selection. */
 
@@ -205,7 +206,7 @@ void xclipboard_persist(Display *display, char *data, size_t len) {
 
             // put the response contents into the request's property
             XChangeProperty(display,
-                            requestor_window,
+                            event.xselectionrequest.requestor,
                             event.xselectionrequest.property,
                             XInternAtom(display, "ATOM", False),
                             32,
@@ -229,14 +230,11 @@ void xclipboard_persist(Display *display, char *data, size_t len) {
             printf("Got a selection request with target = %s and we can send the response in one chunk\n", target_name);
             #endif
 
-            int requestor_window = event.xselectionrequest.requestor;
-            // this registers the requestor if it's not already registered
-            get_requestor(display, requestor_window);
             /* FIXME: ICCCM 2.2: check evt.time and refuse requests from
              * outside the period of time we have owned the selection. */
 
             XChangeProperty(display,
-                            requestor_window,
+                            event.xselectionrequest.requestor,
                             event.xselectionrequest.property,
                             XInternAtom(display, "UTF8_STRING", False),
                             8,
@@ -246,8 +244,6 @@ void xclipboard_persist(Display *display, char *data, size_t len) {
             // TODO: XChangeProperty() can generate BadAlloc, BadAtom, BadMatch, BadValue, and BadWindow errors.
 
             xclipboard_respond(event, event.xselectionrequest.property);
-
-            // TODO: remove the requestor from the list of active requestors
 
             continue;
         }
