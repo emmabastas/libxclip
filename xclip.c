@@ -74,10 +74,8 @@ struct requestor *get_requestor(Display *display, Window window) {
     return first_requestor;
 }
 
-void xclipboard_respond(Display *display, Window window, int time, Atom property) {
-    XEvent *response = malloc(sizeof(XEvent));
-    memset(response, 0, sizeof(XEvent));
-    // FIXME: memory leak
+void xclipboard_respond(XEvent request, Atom property) {
+    XEvent response;
 
     //  Perhaps FIXME: According to ICCCM section 2.5, we should
     //  confirm that XChangeProperty succeeded without any Alloc
@@ -86,18 +84,23 @@ void xclipboard_respond(Display *display, Window window, int time, Atom property
     //  variable, plus doing XSync after each XChangeProperty.
 
     // Set values for the response
-    response->xselection.property  = property;
-    response->xselection.type      = SelectionNotify;
-    response->xselection.display   = display;
-    response->xselection.requestor = window;
-    response->xselection.selection = XA_CLIPBOARD(display);
-    response->xselection.target    = XA_UTF8_STRING(display);
-    response->xselection.time      = time;
+    response.xselection.property  = property;
+    response.xselection.type      = SelectionNotify;
+    response.xselection.display   = request.xselectionrequest.display;
+    response.xselection.requestor = request.xselectionrequest.requestor;
+    response.xselection.selection = request.xselectionrequest.selection;
+    response.xselection.target    = request.xselectionrequest.target;
+    response.xselection.time      = request.xselectionrequest.time;
 
     // send the response event
-    XSendEvent(display, window, True, 0, response);
+    XSendEvent(request.xselectionrequest.display,
+               request.xselectionrequest.requestor,
+               True,
+               0,
+               &response);
     // TODO what errors can this generate?
-    XFlush(display);
+
+    XFlush(request.xselectionrequest.display);
     // TODO what errors can this generate?
 }
 
@@ -188,22 +191,23 @@ void xclipboard_persist(Display *display, char *data, size_t len) {
             // This is the contents of our resonse.
             // We supports two targets
             // 1) The TARGETS target (duh)
-            // 2) XA_UTF8_STRING
-            // FIXME: isn't this a memory leak?
-            Atom types[6] = {
+            // 2) UTF8_STRING
+            // TODO: Should we support more targets by default?
+            // Some reasonable targets could be:
+            // - STRING
+            // - TEXT
+            // - text/plain
+            // - text/plain;charset=utf-8
+            Atom types[2] = {
                 XInternAtom(display, "TARGETS", False),
-                XInternAtom(display, "UTF8_STRING", False),
-                XInternAtom(display, "STRING", False),
-                XInternAtom(display, "TEXT", False),
-                XInternAtom(display, "text/plain", False),
-                XInternAtom(display, "text/plain;charset=utf-8", False)
+                XInternAtom(display, "UTF8_STRING", False)
             };
 
             // put the response contents into the request's property
             XChangeProperty(display,
                             requestor_window,
                             event.xselectionrequest.property,
-                            XA_ATOM,
+                            XInternAtom(display, "ATOM", False),
                             32,
                             PropModeReplace,
                             (unsigned char *) types,
@@ -211,10 +215,7 @@ void xclipboard_persist(Display *display, char *data, size_t len) {
             // TODO: XChangeProperty() can generate BadAlloc, BadAtom, BadMatch, BadValue, and BadWindow errors.
 
             // Now we send the response
-            xclipboard_respond(display,
-                               requestor_window,
-                               event.xselectionrequest.time,
-                               event.xselectionrequest.property);
+            xclipboard_respond(event, event.xselectionrequest.property);
 
             continue;
         }
@@ -222,11 +223,7 @@ void xclipboard_persist(Display *display, char *data, size_t len) {
         // The requestor asked us the send the contents of the selection as a UTF8
         // string, and we can send the contents in one chunk
         if (event.type == SelectionRequest
-            && (target == XInternAtom(display, "UTF8_STRING", False)
-                || target == XInternAtom(display, "STRING", False)
-                || target == XInternAtom(display, "TEXT", False)
-                || target == XInternAtom(display, "text/plain", False)
-                || target == XInternAtom(display, "text/plain;charset=utf-8", False))
+            && target == XInternAtom(display, "UTF8_STRING", False)
             && len <= chunk_size) {
             #ifdef DEBUG
             printf("Got a selection request with target = %s and we can send the response in one chunk\n", target_name);
@@ -241,17 +238,14 @@ void xclipboard_persist(Display *display, char *data, size_t len) {
             XChangeProperty(display,
                             requestor_window,
                             event.xselectionrequest.property,
-                            XA_UTF8_STRING(display),
+                            XInternAtom(display, "UTF8_STRING", False),
                             8,
                             PropModeReplace,
                             (unsigned char *) data,
                             (int) len);
             // TODO: XChangeProperty() can generate BadAlloc, BadAtom, BadMatch, BadValue, and BadWindow errors.
 
-            xclipboard_respond(event.xselectionrequest.display,//display,
-                               requestor_window,
-                               event.xselectionrequest.time,
-                               event.xselectionrequest.property);
+            xclipboard_respond(event, event.xselectionrequest.property);
 
             // TODO: remove the requestor from the list of active requestors
 
@@ -259,21 +253,14 @@ void xclipboard_persist(Display *display, char *data, size_t len) {
         }
 
         if (event.type == SelectionRequest
-            && (target == XInternAtom(display, "UTF8_STRING", False)
-                || target == XInternAtom(display, "STRING", False)
-                || target == XInternAtom(display, "TEXT", False)
-                || target == XInternAtom(display, "text/plain", False)
-                || target == XInternAtom(display, "text/plain;charset=utf-8", False))
+            && target == XInternAtom(display, "UTF8_STRING", False)
             && len > chunk_size) {
             #ifdef DEBUG
             printf("Got a selection request with target = %s but we can't send the response in one chunk\n", target_name);
             #endif
 
             // TODO: implement
-            xclipboard_respond(display,
-                               event.xselectionrequest.requestor,
-                               event.xselectionrequest.time,
-                               None);
+            xclipboard_respond(event, None);
 
             continue;
         }
@@ -286,10 +273,7 @@ void xclipboard_persist(Display *display, char *data, size_t len) {
             printf("Got a selection request with target = %s. We do not support this target\n", target_name);
             #endif
 
-            xclipboard_respond(display,
-                               event.xselectionrequest.requestor,
-                               event.xselectionrequest.time,
-                               None);
+            xclipboard_respond(event, None);
 
             continue;
         }
