@@ -72,6 +72,16 @@ void _00500_test_wierd_data() {
     system("xclip -o -selection clipboard -target UTF8_STRING 2>&1");
 }
 
+void _00600_multiple_puts() {
+    printf("\n\n=== multiple libxclip_put in succession behaves as expected===\n");
+    libxclip_put(display, "1", 1);
+    libxclip_put(display, "2", 1);
+    libxclip_put(display, "3", 1);
+    printf("> xclip -o -selection clipboard -target UTF8_STRING 2>&1: ");
+    fflush(stdout);
+    system("xclip -o -selection clipboard -target UTF8_STRING 2>&1");
+}
+
 int main(void) {
     display = XOpenDisplay(NULL);
     a_clipboard = XInternAtom(display, "CLIPBOARD", False);
@@ -95,6 +105,9 @@ int main(void) {
     }
     if(strcmp(buffer, "00500\n") == 0) {
         _00500_test_wierd_data();
+    }
+    if(strcmp(buffer, "00600\n") == 0) {
+        _00600_multiple_puts();
     }
 
     return 0;
