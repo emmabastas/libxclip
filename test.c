@@ -55,9 +55,9 @@ void _00400_test_simple_data() {
     data = "Foobarbaz";
     printf("libxclip_put with \"%s\"\n", data);
     libxclip_put(display, data, strlen(data));
-    printf("> xclip -o -selection clipboard 2>&1 -target UTF8_STRING: ");
+    printf("> xclip -o -selection clipboard 2>&1: ");
     fflush(stdout);
-    system("xclip -o -selection clipboard 2>&1 -target UTF8_STRING");
+    system("xclip -o -selection clipboard 2>&1");
 }
 
 void _00500_test_wierd_data() {
@@ -67,9 +67,9 @@ void _00500_test_wierd_data() {
     fwrite(data, 1, 160, stdout);
     printf("\"\n");
     libxclip_put(display, data, 160);
-    printf("> xclip -o -selection clipboard -target UTF8_STRING 2>&1: ");
+    printf("> xclip -o -selection clipboard 2>&1: ");
     fflush(stdout);
-    system("xclip -o -selection clipboard -target UTF8_STRING 2>&1");
+    system("xclip -o -selection clipboard 2>&1");
 }
 
 void _00600_multiple_puts() {
@@ -77,9 +77,8 @@ void _00600_multiple_puts() {
     libxclip_put(display, "1", 1);
     libxclip_put(display, "2", 1);
     libxclip_put(display, "3", 1);
-    printf("> xclip -o -selection clipboard -target UTF8_STRING 2>&1: ");
+    printf("> xclip -o -selection clipboard 2>&1: ");
     fflush(stdout);
-    system("xclip -o -selection clipboard -target UTF8_STRING 2>&1");
 }
 
 int main(void) {
