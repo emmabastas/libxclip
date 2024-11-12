@@ -2,15 +2,13 @@
 
 #include <stdlib.h>
 #include <assert.h>
+#include <stdio.h>
+#include <stdio_ext.h> // for __fpurge
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #include <X11/Xmu/Atoms.h> // TODO remove this an use XInternAtom instead
 
 // #define DEBUG
-
-#ifdef DEBUG
-#include <stdio.h>
-#endif
 
 enum TransferState {
     STATE_NONE         = 0,
@@ -173,8 +171,15 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
         // here to, but why??
         XSetSelectionOwner(display, XA_CLIPBOARD(display), None, CurrentTime);
         // TODO: What errors can this generate?
-        return pid;
     }
+
+    // when fork() creates the child process it copies the stack and the heap
+    // from the parent process, including the stdout buffer. This means that
+    // the (copied) stdout buffer is flushed when the child process terminates,
+    // in some cases resulting in mysterious "double printing". So the child
+    // process starts by clearing the outout buffer to avoid this.
+    __fpurge(stdout);
+    return pid;
 
     // Move into root, so that we don't cause any problems in case the directory
     // we're currently in needs to be unmounted

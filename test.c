@@ -24,6 +24,16 @@ int main(void) {
     fflush(stdout);
     system("xclip -o -selection clipboard");
 
+    printf("\n\n=== libxclip_put doesn't cause double printing\n");
+    // See the comments next to __fpurge in libxclip.c for an explaination of
+    // this test
+    printf("libxclip_put prints: ");
+    fflush(stdout);
+    fwrite("I'm in the stdout buffer", 1, 24, stdout);
+    libxclip_put(display, "", 0);
+    fflush(stdout);
+    XSetSelectionOwner(display, a_clipboard, None, CurrentTime);
+
     printf("\n\n=== Simple libxclip_put ===\n");
     data = "Foobarbaz";
     printf("libxclip_put with \"%s\"\n", data);
