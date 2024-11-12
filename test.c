@@ -108,6 +108,22 @@ void _009000_handles_TARGETS() {
     system("xclip -o -selection clipboard -target TARGETS 2>&1");
 }
 
+void _010000_handles_large_data() {
+    printf("\n\n=== libxclip can handle sucessively larger and larger data\n");
+    const unsigned long n = 25;
+    char *buffer = malloc(1 << n);
+    memset(buffer, '#', 1 << n);
+    printf("buffer size (#bytes)\n");
+    for(int i = 11; i <= n; i++) {
+        const unsigned long len = 1 << i;
+        printf("%ld: ", len);
+        fflush(stdout);
+        libxclip_put(display, buffer, len);
+        system("xclip -o -selection clipboard | md5sum");
+        printf("\n");
+    }
+}
+
 int main(void) {
     display = XOpenDisplay(NULL);
     a_clipboard = XInternAtom(display, "CLIPBOARD", False);
@@ -143,6 +159,9 @@ int main(void) {
     }
     if(strcmp(buffer, "00900\n") == 0) {
         _009000_handles_TARGETS();
+    }
+    if(strcmp(buffer, "01000\n") == 0) {
+        _010000_handles_large_data();
     }
 
     return 0;
