@@ -1,6 +1,7 @@
 #include "libxclip.h"
 
 #include <stdlib.h>
+#include <unistd.h>
 #include <assert.h>
 #include <stdio.h>
 #include <stdio_ext.h> // for __fpurge
@@ -9,6 +10,9 @@
 #include <X11/Xmu/Atoms.h> // TODO remove this an use XInternAtom instead
 
 // #define DEBUG
+
+// pid of the child process, of 0 if we're still in the parent process
+pid_t pid = 0;
 
 enum TransferState {
     STATE_NONE         = 0,
@@ -163,15 +167,43 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
     // See: https://unix.stackexchange.com/questions/155017/does-fork-immediately-copy-the-entire-process-heap-in-linux
     // THAT'S SO COOL
 
-    pid_t pid = fork();
+    pid = fork();
     if (pid != 0) {
-        // I don't understand how this works; In my mind, we make this function call
-        // we tell the X11 server that no one owns the clipboard any more, but this
-        // line is included in `xclip` when they fork, and it works.. and it works
-        // here to, but why??
-        XSetSelectionOwner(display, XA_CLIPBOARD(display), None, CurrentTime);
-        // TODO: What errors can this generate?
+        return pid;
     }
+
+    // Now that we're in the child process we re-open the connection to the display
+    // I'm not sure how this all works, if this is the correct thing to do. All I
+    // know is if I don't have this I run into problems and StackOverflow comments
+    // suggest that you "need one XOpenDisplay per thread", and that almost what
+    // we're doing here
+    Display *parent_display = display;
+    display = XOpenDisplay(XDisplayString(parent_display));
+
+    // By the time we get to this point there might be events that ended up in
+    // the parent process' event queue because we missed them, so what we do
+    // is we look at the parents queue and copy all of those events to our queue
+    // TODO: race conditions?
+    // TODO: is this the right place to do this
+    XEvent parent_event;
+    for (int i = 0; i < XEventsQueued(parent_display, QueuedAlready); i++) {
+        XNextEvent(parent_display, &parent_event);
+        XPutBackEvent(display, &parent_event);
+    }
+
+    // As such we re-establish owneship of the selection and re-set input masks
+    // Maybe it's a good idea that we do this now that we're in the child process.
+    // What happens to any events that occured between the parent process doing
+    // this and us doning it here now? Maybe the event queue is copied by fork??
+    // My brain is hurting :-(
+    // UPDATE: The event queue is not copied, the pice of code just before
+    //         we start the while loop handles this.
+    XSetSelectionOwner(display, XA_CLIPBOARD(display), window, CurrentTime);
+    if (XGetSelectionOwner(display, XA_CLIPBOARD(display)) != window) {
+        assert(False);
+        // TODO handle error
+    }
+    XSelectInput(display, window, PropertyChangeMask);
 
     // when fork() creates the child process it copies the stack and the heap
     // from the parent process, including the stdout buffer. This means that
@@ -179,7 +211,6 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
     // in some cases resulting in mysterious "double printing". So the child
     // process starts by clearing the outout buffer to avoid this.
     __fpurge(stdout);
-    return pid;
 
     // Move into root, so that we don't cause any problems in case the directory
     // we're currently in needs to be unmounted
@@ -193,6 +224,9 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
     XEvent event;
     while (True) {
         XNextEvent(display, &event);
+        #ifdef DEBUG
+        printf("Got an event\n");
+        #endif
 
         // We have lost ownership of the selection (for instance the user did a
         // CTRL-C in some other application).
@@ -201,13 +235,15 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
             #ifdef DEBUG
             printf("Got a SelectionClear\n");
             #endif
-            // TODO
-            return 0;
+
+            _Exit(3);
+
+            // TODO handle remaining transfers
         }
 
-        int target;
+        int target = 0; // Initialized only to avoid -Wmaybe-uninitialized
         #ifdef DEBUG
-        char *target_name;
+        char *target_name = "";
         #endif
         if (event.type == SelectionRequest) {
             target = event.xselectionrequest.target;
