@@ -112,21 +112,59 @@ void xclipboard_respond(XEvent request, Atom property) {
 }
 
 pid_t libxclip_put(Display *display, char *data, size_t len) {
-    // Determine chunk_size
-    // In the case that the selections contents is very large we may
-    // have to send the clipboard selection in multiple chunks,
-    // and the maximum chink size is defined by X11
-    //
-    // We consider selections larger than a quarter of the maximum
-    // request size to be "large". See ICCCM section 2.5
-    // FIXME: I think the chunk_size should be ~16x the size of what we currently do
-    //
-    // First see if X supports extended-length encoding, it returns 0 if not
-    size_t chunk_size = XExtendedMaxRequestSize(display) / 4;
-    // Otherwise, try the normal encoding
-    if (!chunk_size) { chunk_size = XMaxRequestSize(display) / 4; }
-    // If this fails for some reason, we fallback to this
-    if (!chunk_size) { chunk_size = 4096; }
+
+    // The first thing we do, in an attempt to avoid race conditions,
+    // missed events, and so on, is to create the child process and then have the
+    // parent process freeze until the child process has performed all it's setup
+
+    // NB. The selections contents are stored in `data` and the child process will of
+    // course read from this. What happens though in the case that the parent process
+    // exits before the child process is finished? One might think that all data all-
+    // ocated by the parent process is freed, including what `data` points to. This
+    // is true in some sense, but `fork` performs a copy-on-write duplication on all
+    // of the heap contents from the parent process to the child process. This means:
+    // 1) If the parent process never writes to `data` after having called
+    //    `xlipboard_persit` then no copies are made of that data, yet the child
+    //    process still has acess to it after the parent process exited. AWESOME!
+    // 2) If the parent process does write then the `data` is copied, and the child
+    //    process will continue to acess the original contents.
+    // See: https://unix.stackexchange.com/questions/155017/does-fork-immediately-copy-the-entire-process-heap-in-linux
+    // THAT'S SO COOL
+
+    // We'll use these pipes for the child process to thell the parent that it can
+    // resume.
+    int pipefd[2];
+    int ret = pipe(pipefd);
+    if (ret == -1) {
+        assert(False);
+    }
+
+    pid = fork();
+    if (pid != 0) {
+        #ifdef DEBUG
+        printf("Waiting for child process to setup before returning to called\n");
+        #endif
+
+        char buf;
+        read(pipefd[0], &buf, 1);
+
+        #ifdef DEBUG
+        printf("Child process is done with setup\n");
+        #endif
+
+        close(pipefd[0]);
+        close(pipefd[1]);
+
+        return pid;
+    }
+
+    // Now that we're in the child process we re-open the connection to the display
+    // I'm not sure how this all works, if this is the correct thing to do. All I
+    // know is if I don't have this I run into problems and StackOverflow comments
+    // suggest that you "need one XOpenDisplay per thread", and that almost what
+    // we're doing here
+    Display *parent_display = display;
+    display = XOpenDisplay(XDisplayString(parent_display));
 
     // A dummy window that exists only for us to intercept `SelectionRequest` events
     Window window = XCreateSimpleWindow(display, DefaultRootWindow(display), 0, 0, 1, 1, 0, 0, 0);
@@ -150,61 +188,6 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
     // TODO: XSelectInput() can generate a BadWindow error.
     // https://tronche.com/gui/x/xlib/event-handling/XSelectInput.html
 
-    // Now it's time to create a separate process that hangs around waiting for other
-    // programs to make selection requests.
-    //
-    // NB. The selections contents are stored in `data` and the child process will of
-    // course read from this. What happens though in the case that the parent process
-    // exits before the child process is finished? One might think that all data all-
-    // ocated by the parent process is freed, including what `data` points to. This
-    // is true in some sense, but `fork` performs a copy-on-write duplication on all
-    // of the heap contents from the parent process to the child process. This means:
-    // 1) If the parent process never writes to `data` after having called
-    //    `xlipboard_persit` then no copies are made of that data, yet the child
-    //    process still has acess to it after the parent process exited. AWESOME!
-    // 2) If the parent process does write then the `data` is copied, and the child
-    //    process will continue to acess the original contents.
-    // See: https://unix.stackexchange.com/questions/155017/does-fork-immediately-copy-the-entire-process-heap-in-linux
-    // THAT'S SO COOL
-
-    pid = fork();
-    if (pid != 0) {
-        return pid;
-    }
-
-    // Now that we're in the child process we re-open the connection to the display
-    // I'm not sure how this all works, if this is the correct thing to do. All I
-    // know is if I don't have this I run into problems and StackOverflow comments
-    // suggest that you "need one XOpenDisplay per thread", and that almost what
-    // we're doing here
-    Display *parent_display = display;
-    display = XOpenDisplay(XDisplayString(parent_display));
-
-    // By the time we get to this point there might be events that ended up in
-    // the parent process' event queue because we missed them, so what we do
-    // is we look at the parents queue and copy all of those events to our queue
-    // TODO: race conditions?
-    // TODO: is this the right place to do this
-    XEvent parent_event;
-    for (int i = 0; i < XEventsQueued(parent_display, QueuedAlready); i++) {
-        XNextEvent(parent_display, &parent_event);
-        XPutBackEvent(display, &parent_event);
-    }
-
-    // As such we re-establish owneship of the selection and re-set input masks
-    // Maybe it's a good idea that we do this now that we're in the child process.
-    // What happens to any events that occured between the parent process doing
-    // this and us doning it here now? Maybe the event queue is copied by fork??
-    // My brain is hurting :-(
-    // UPDATE: The event queue is not copied, the pice of code just before
-    //         we start the while loop handles this.
-    XSetSelectionOwner(display, XA_CLIPBOARD(display), window, CurrentTime);
-    if (XGetSelectionOwner(display, XA_CLIPBOARD(display)) != window) {
-        assert(False);
-        // TODO handle error
-    }
-    XSelectInput(display, window, PropertyChangeMask);
-
     // when fork() creates the child process it copies the stack and the heap
     // from the parent process, including the stdout buffer. This means that
     // the (copied) stdout buffer is flushed when the child process terminates,
@@ -221,12 +204,39 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
         #endif
     }
 
+    // Determine chunk_size
+    // In the case that the selections contents is very large we may
+    // have to send the clipboard selection in multiple chunks,
+    // and the maximum chink size is defined by X11
+    //
+    // We consider selections larger than a quarter of the maximum
+    // request size to be "large". See ICCCM section 2.5
+    // FIXME: I think the chunk_size should be ~16x the size of what we currently do
+    //
+    // First see if X supports extended-length encoding, it returns 0 if not
+    size_t chunk_size = XExtendedMaxRequestSize(display) / 4;
+    // Otherwise, try the normal encoding
+    if (!chunk_size) { chunk_size = XMaxRequestSize(display) / 4; }
+    // If this fails for some reason, we fallback to this
+    if (!chunk_size) { chunk_size = 4096; }
+
+    // Now we're ready for the parent process to return to the caller
+    // TODO: We can probably let the parent resume earlier than this, but let's
+    // stay safe for now
+    XSync(display, False);
+    write(pipefd[1], "1", 1); // Notify parent
+    close(pipefd[0]);
+    close(pipefd[1]);
+
     XEvent event;
     while (True) {
         XNextEvent(display, &event);
         #ifdef DEBUG
         printf("Got an event\n");
         #endif
+
+        /* FIXME: ICCCM 2.2: check evt.time and refuse requests from
+         * outside the period of time we have owned the selection. */
 
         // We have lost ownership of the selection (for instance the user did a
         // CTRL-C in some other application).
@@ -265,9 +275,6 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
             #ifdef DEBUG
             printf("Got a selection request with target = TARGETS\n");
             #endif
-
-            /* FIXME: ICCCM 2.2: check evt.time and refuse requests from
-             * outside the period of time we have owned the selection. */
 
             // This is the contents of our resonse.
             // We supports two targets
