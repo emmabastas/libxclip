@@ -73,12 +73,39 @@ void _00500_test_wierd_data() {
 }
 
 void _00600_multiple_puts() {
-    printf("\n\n=== multiple libxclip_put in succession behaves as expected===\n");
+    printf("\n\n=== multiple libxclip_put in succession behaves as expected ===\n");
     libxclip_put(display, "1", 1);
     libxclip_put(display, "2", 1);
     libxclip_put(display, "3", 1);
     printf("> xclip -o -selection clipboard 2>&1: ");
     fflush(stdout);
+    system("xclip -o -selection clipboard 2>&1");
+}
+
+void _007000_multiple_pastes() {
+    printf("\n\n=== one libxclip_put can serve multiple CTRL-V's ===");
+    libxclip_put(display, "hej!", 4);
+    for(int i = 0; i < 3; i++) {
+        printf("\n");
+        printf("> xclip -o -selection clipboard 2>&1: ");
+        fflush(stdout);
+        system("xclip -o -selection clipboard 2>&1");
+    }
+}
+
+void _008000_empty_contents() {
+    printf("\n\n=== libxclip can take empy data ===\n");
+    libxclip_put(display, "", 0);
+    printf("> xclip -o -selection clipboard 2>&1: ");
+    fflush(stdout);
+    system("xclip -o -selection clipboard 2>&1");
+}
+
+void _009000_handles_TARGETS() {
+    printf("\n\n=== libxclip can respond to a TARGETS request\n");
+    libxclip_put(display, "", 0);
+    printf("> xclip -o -selection clipboard -target TARGETS 2>&1:\n");
+    system("xclip -o -selection clipboard -target TARGETS 2>&1");
 }
 
 int main(void) {
@@ -107,6 +134,15 @@ int main(void) {
     }
     if(strcmp(buffer, "00600\n") == 0) {
         _00600_multiple_puts();
+    }
+    if(strcmp(buffer, "00700\n") == 0) {
+        _007000_multiple_pastes();
+    }
+    if(strcmp(buffer, "00800\n") == 0) {
+        _008000_empty_contents();
+    }
+    if(strcmp(buffer, "00900\n") == 0) {
+        _009000_handles_TARGETS();
     }
 
     return 0;

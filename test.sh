@@ -7,3 +7,6 @@ echo "00300" | ./test
 echo "00400" | ./test
 echo "00500" | ./test
 echo "00600" | ./test
+echo "00700" | ./test
+echo "00800" | ./test
+echo "00900" | ./test
