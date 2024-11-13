@@ -15,10 +15,8 @@
 pid_t pid = 0;
 
 enum TransferState {
-    STATE_NONE         = 0,
-    STATE_SENT_REQUEST = 1,
-    STATE_TRANSFERING  = 2,
-    STATE_BAD_TARGET   = 3,
+    STATE_NONE = 0,
+    STATE_INCR = 1,
 };
 
 // The selection we hold may be so large we have to transfer it in chunks, in which
@@ -30,6 +28,8 @@ struct transfer
     // to uniquely identify a requestor
     Window requestor_window;
     enum TransferState state;
+    Atom property;
+    size_t bytes_transfered;
     struct transfer *next;
 };
 
@@ -54,6 +54,8 @@ struct transfer *get_transfer(struct transfer **first_transfer, Window requestor
     struct transfer *new_transfer = malloc(sizeof(struct transfer));
     new_transfer->requestor_window = requestor_window;
     new_transfer->state = STATE_NONE;
+    new_transfer->property = 0;
+    new_transfer->bytes_transfered = 0;
     new_transfer->next = *first_transfer;
     *first_transfer = new_transfer;
 
@@ -220,6 +222,9 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
     // If this fails for some reason, we fallback to this
     if (!chunk_size) { chunk_size = 4096; }
 
+    // The head of the linked list that keeps track of all ongoing INCR transfers.
+    struct transfer *transfers = NULL;
+
     // Now we're ready for the parent process to return to the caller
     // TODO: We can probably let the parent resume earlier than this, but let's
     // stay safe for now
@@ -235,8 +240,8 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
         printf("Got an event\n");
         #endif
 
-        /* FIXME: ICCCM 2.2: check evt.time and refuse requests from
-         * outside the period of time we have owned the selection. */
+        // FIXME: ICCCM 2.2: check evt.time and refuse requests from
+        // outside the period of time we have owned the selection.
 
         // We have lost ownership of the selection (for instance the user did a
         // CTRL-C in some other application).
@@ -317,9 +322,6 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
             printf("Got a selection request with target = %s and we can send the response in one chunk\n", target_name);
             #endif
 
-            /* FIXME: ICCCM 2.2: check evt.time and refuse requests from
-             * outside the period of time we have owned the selection. */
-
             XChangeProperty(display,
                             event.xselectionrequest.requestor,
                             event.xselectionrequest.property,
@@ -335,6 +337,8 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
             continue;
         }
 
+        // The requestor asked us the send the contents of the selection as a UTF8
+        // string, and we have to send it in multiple chunks.
         if (event.type == SelectionRequest
             && target == XInternAtom(display, "UTF8_STRING", False)
             && len > chunk_size) {
@@ -342,8 +346,111 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
             printf("Got a selection request with target = %s but we can't send the response in one chunk\n", target_name);
             #endif
 
-            // TODO: implement
-            xclipboard_respond(event, None);
+            // FIXME: instead of sending zero items we should send an integer
+            //        representing the lower bound on the number of bytes to send
+            //        ICCCM 2.7.2 INCR Properties.
+            XChangeProperty(display,
+                            event.xselectionrequest.requestor,
+                            event.xselectionrequest.property,
+                            XInternAtom(display, "INCR", False),
+                            32,
+                            PropModeReplace,
+                            0,
+                            0);
+
+            // With the INCR mechanism, we need to know
+            // when the requestor window changes (deletes)
+            // its properties.
+            XSelectInput(display, event.xselectionrequest.requestor, PropertyChangeMask);
+
+            xclipboard_respond(event, event.xselectionrequest.property);
+
+            // We register that we have a new transfer in progress
+            struct transfer *t = get_transfer(&transfers, event.xselectionrequest.requestor);
+
+            // Is there an ongoing transfer already?
+            if (t->state != STATE_NONE) {
+                // TODO: handle somehow
+                // assert(False); TODO: add me back
+            }
+
+            t->state = STATE_INCR;
+            t->property = event.xselectionrequest.property; // ??
+
+            continue;
+        }
+
+        // It _may_ be the case that some requestor is asking us to send another
+        // chunk
+        if (event.type == PropertyNotify
+            && event.xproperty.state == PropertyDelete) {
+            #ifdef DEBUG
+            printf("Got a PropertyNotify and it's state field is PropertyDelete\n");
+            #endif
+
+            struct transfer *t = get_transfer(&transfers, event.xproperty.window);
+            if (t->state == STATE_NONE) {
+                #ifdef DEBUG
+                printf("PropertyNotify is not concearning an ongoing transfer of ours, not interested.\n");
+                #endif
+                delete_transfer(&transfers, t);
+                continue;
+            }
+
+            // TODO: handle
+            if (t->state != STATE_INCR) {
+                assert(False);
+            }
+
+            // This should never happen
+            if (len < t->bytes_transfered) {
+                assert(False);
+            }
+
+            size_t left_to_transfer = len - t->bytes_transfered;
+            size_t this_chunk_size = chunk_size;
+            unsigned char *this_data = (unsigned char*) data + t->bytes_transfered;
+
+            if (left_to_transfer == 0) {
+                this_chunk_size = 0;
+                this_data = 0;
+            } else if (left_to_transfer < chunk_size) {
+                this_chunk_size = left_to_transfer;
+            }
+
+            XChangeProperty(display,
+                            event.xproperty.window,
+                            t->property,
+                            XInternAtom(display, "UTF8_STRING", False),
+                            8,
+                            PropModeReplace,
+                            this_data,
+                            (int) this_chunk_size);
+
+            t->bytes_transfered = t->bytes_transfered + this_chunk_size;
+
+            // Set values for the response
+            XEvent response;
+            response.xselection.property  = t->property;
+            response.xselection.type      = SelectionNotify;
+            response.xselection.display   = event.xproperty.display;
+            response.xselection.requestor = event.xproperty.window;
+            response.xselection.selection = XInternAtom(display, "CLIPBOARD", False);
+            response.xselection.target    = XInternAtom(display, "UTF8_STRING", False);
+            response.xselection.time      = event.xproperty.time;
+
+            // send the response event
+            XSendEvent(event.xproperty.display,
+                       event.xproperty.window,
+                       True,
+                       0,
+                       &response);
+            // TODO what errors can this generate?
+
+            XFlush(event.xproperty.display);
+            // TODO what errors can this generate?
+
+            XSync(display, False);
 
             continue;
         }
@@ -357,14 +464,6 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
             #endif
 
             xclipboard_respond(event, None);
-
-            continue;
-        }
-
-        if (event.type == PropertyNotify) {
-            #ifdef DEBUG
-            printf("Got a PropertyNotify\n");
-            #endif
 
             continue;
         }

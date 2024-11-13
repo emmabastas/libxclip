@@ -119,7 +119,7 @@ void _010000_handles_large_data() {
         printf("%ld: ", len);
         fflush(stdout);
         libxclip_put(display, buffer, len);
-        system("xclip -o -selection clipboard | md5sum");
+        system("xclip -o -selection clipboard -target UTF8_STRING | wc -c");
         printf("\n");
     }
 }
