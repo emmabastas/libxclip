@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <stdio_ext.h> // for __fpurge
 #include <X11/Xlib.h>
-#include <X11/Xatom.h>
 #include <X11/Xmu/Atoms.h> // TODO remove this an use XInternAtom instead
 
 // #define DEBUG
