@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <stdio_ext.h> // for __fpurge
 #include <X11/Xlib.h>
-#include <X11/Xmu/Atoms.h> // TODO remove this an use XInternAtom instead
 
 // #define DEBUG
 
@@ -197,6 +196,12 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
     Display *parent_display = display;
     display = XOpenDisplay(XDisplayString(parent_display));
 
+    // Intern some atoms
+    const Atom A_CLIPBOARD = XInternAtom(display, "CLIPBOARD", False);
+    const Atom A_TARGETS = XInternAtom(display, "TARGETS", False);
+    const Atom A_UTF8_STRING = XInternAtom(display, "UTF8_STRING", False);
+    const Atom A_INCR = XInternAtom(display, "INCR", False);
+
     // A dummy window that exists only for us to intercept `SelectionRequest` events
     Window window = XCreateSimpleWindow(display, DefaultRootWindow(display), 0, 0, 1, 1, 0, 0, 0);
     // TODO: XCreateSimpleWindow can generate BadAlloc, BadMatch, BadValue, and BadWindow errors.
@@ -205,11 +210,11 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
     // take control of the selection so that we receive
     // `SelectionRequest` events from other windows
     // FIXME: Should not use CurrentTime, according to ICCCM section 2.1
-    XSetSelectionOwner(display, XA_CLIPBOARD(display), window, CurrentTime);
+    XSetSelectionOwner(display, A_CLIPBOARD, window, CurrentTime);
     // TODO: What errorrs can this generate?
 
     // Double-check SetSelectionOwner did not "merely appear to succeed"
-    if (XGetSelectionOwner(display, XA_CLIPBOARD(display)) != window) {
+    if (XGetSelectionOwner(display, A_CLIPBOARD) != window) {
         assert(False);
         // TODO handle error
     }
@@ -253,12 +258,6 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
 
     // The head of the linked list that keeps track of all ongoing INCR transfers.
     struct transfer *transfers = NULL;
-
-    // Intern some atoms
-    const Atom A_CLIPBOARD = XInternAtom(display, "CLIPBOARD", False);
-    const Atom A_TARGETS = XInternAtom(display, "TARGETS", False);
-    const Atom A_UTF8_STRING = XInternAtom(display, "UTF8_STRING", False);
-    const Atom A_INCR = XInternAtom(display, "INCR", False);
 
     // Now we're ready for the parent process to return to the caller
     // TODO: We can probably let the parent resume earlier than this, but let's
@@ -486,8 +485,8 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
 
         // The target is not something that we support
         if (event.type == SelectionRequest
-            && event.xselectionrequest.target != XInternAtom(display, "TARGETS", False)
-            && event.xselectionrequest.target != XA_UTF8_STRING(display)) {
+            && event.xselectionrequest.target != A_TARGETS
+            && event.xselectionrequest.target != A_UTF8_STRING) {
             #ifdef DEBUG
             printf("Got a selection request with target = %s. We do not support this target\n", target_name);
             #endif
@@ -517,7 +516,7 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
     }
 
     // Let everyone know that we're no longer taking care of the selection
-    XSetSelectionOwner(display, XA_CLIPBOARD(display), None, CurrentTime);
+    XSetSelectionOwner(display, A_CLIPBOARD, None, CurrentTime);
 
     // This return statement doesn't do anything meaningfull, because this return
     // commes from the child process. The statement is only here to have the compiler
