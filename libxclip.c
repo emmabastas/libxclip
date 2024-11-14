@@ -13,8 +13,9 @@
 #include <stdio.h>
 #endif
 
-// pid of the child process, of 0 if we're still in the parent process
-pid_t pid = 0;
+struct PutOptions {
+    char phantom; // Just here to remove -pedantic warning
+};
 
 // The selection we hold may be so large we have to transfer it in chunks, in which
 // case we have to keep track of our ongoing transfers. We do this with this struct,
@@ -136,7 +137,7 @@ void xclipboard_respond(XEvent request, Atom property, Atom selection, Atom targ
     // TODO what errors can this generate?
 }
 
-pid_t libxclip_put(Display *display, char *data, size_t len) {
+int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) {
 
     // The first thing we do, in an attempt to avoid race conditions,
     // missed events, and so on, is to create the child process and then have the
@@ -164,7 +165,7 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
         assert(False);
     }
 
-    pid = fork();
+    pid_t pid = fork();
     if (pid != 0) {
         #ifdef DEBUG
         printf("Waiting for child process to setup before returning to called\n");
@@ -189,7 +190,7 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
         close(pipefd[0]);
         close(pipefd[1]);
 
-        return pid;
+        return 0;
     }
 
     // Now that we're in the child process we re-open the connection to the display
@@ -522,8 +523,5 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
     // Let everyone know that we're no longer taking care of the selection
     XSetSelectionOwner(display, A_CLIPBOARD, None, CurrentTime);
 
-    // This return statement doesn't do anything meaningfull, because this return
-    // commes from the child process. The statement is only here to have the compiler
-    // not complain.
-    return pid;
+    return 0;
 }

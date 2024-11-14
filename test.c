@@ -22,7 +22,7 @@ void _00200_test_no_double_printing() {
     fflush(stdout);
     // "I'm in the stdout buffer" will be copied to the childs stdout buffer
     fwrite("I'm in the stdout buffer", 1, 24, stdout);
-    libxclip_put(display, "", 0);
+    libxclip_put(display, "", 0, NULL);
     // Remove "I'm in the stdout buffer" from this process' stdout buffer
     __fpurge(stdout);
     // XSetSelectionOwner causes the child process to exit and flush stdout.
@@ -39,7 +39,7 @@ void _00200_test_no_double_printing() {
 void _00300_test_no_missed_events_in_begining() {
     printf("\n\n=== libxclip doesn't miss XEvent's in the beginning ===\n");
     printf("libxclip_put(display, \"\", 0);\n");
-    pid_t pid = libxclip_put(display, "", 0);
+    pid_t pid = libxclip_put(display, "", 0, NULL);
     printf("XSetSelectionOwner(display, a_clipboard, None, CurrentTime);\n");
     XSetSelectionOwner(display, a_clipboard, None, CurrentTime);
     printf("XSync(display, False);\n");
@@ -54,7 +54,7 @@ void _00400_test_simple_data() {
     printf("\n\n=== libxclip_put with some simple data ===\n");
     data = "Foobarbaz";
     printf("libxclip_put with \"%s\"\n", data);
-    libxclip_put(display, data, strlen(data));
+    libxclip_put(display, data, strlen(data), NULL);
     printf("> xclip -o -selection clipboard 2>&1: ");
     fflush(stdout);
     system("xclip -o -selection clipboard 2>&1");
@@ -66,7 +66,7 @@ void _00500_test_wierd_data() {
     printf("libxclip_put with \"");
     fwrite(data, 1, 160, stdout);
     printf("\"\n");
-    libxclip_put(display, data, 160);
+    libxclip_put(display, data, 160, NULL);
     printf("> xclip -o -selection clipboard 2>&1: ");
     fflush(stdout);
     system("xclip -o -selection clipboard 2>&1");
@@ -74,9 +74,9 @@ void _00500_test_wierd_data() {
 
 void _00600_multiple_puts() {
     printf("\n\n=== multiple libxclip_put in succession behaves as expected ===\n");
-    libxclip_put(display, "1", 1);
-    libxclip_put(display, "2", 1);
-    libxclip_put(display, "3", 1);
+    libxclip_put(display, "1", 1, NULL);
+    libxclip_put(display, "2", 1, NULL);
+    libxclip_put(display, "3", 1, NULL);
     printf("> xclip -o -selection clipboard 2>&1: ");
     fflush(stdout);
     system("xclip -o -selection clipboard 2>&1");
@@ -84,7 +84,7 @@ void _00600_multiple_puts() {
 
 void _007000_multiple_pastes() {
     printf("\n\n=== one libxclip_put can serve multiple CTRL-V's ===");
-    libxclip_put(display, "hej!", 4);
+    libxclip_put(display, "hej!", 4, NULL);
     for(int i = 0; i < 3; i++) {
         printf("\n");
         printf("> xclip -o -selection clipboard 2>&1: ");
@@ -95,7 +95,7 @@ void _007000_multiple_pastes() {
 
 void _008000_empty_contents() {
     printf("\n\n=== libxclip can take empy data ===\n");
-    libxclip_put(display, "", 0);
+    libxclip_put(display, "", 0, NULL);
     printf("> xclip -o -selection clipboard 2>&1: ");
     fflush(stdout);
     system("xclip -o -selection clipboard 2>&1");
@@ -103,7 +103,7 @@ void _008000_empty_contents() {
 
 void _009000_handles_TARGETS() {
     printf("\n\n=== libxclip can respond to a TARGETS request\n");
-    libxclip_put(display, "", 0);
+    libxclip_put(display, "", 0, NULL);
     printf("> xclip -o -selection clipboard -target TARGETS 2>&1:\n");
     system("xclip -o -selection clipboard -target TARGETS 2>&1");
 }
@@ -118,7 +118,7 @@ void _010000_handles_large_data() {
         const unsigned long len = 1 << i;
         printf("%ld: ", len);
         fflush(stdout);
-        libxclip_put(display, buffer, len);
+        libxclip_put(display, buffer, len, NULL);
         system("xclip -o -selection clipboard | wc -c");
         printf("\n");
     }
@@ -130,7 +130,7 @@ void _011000_multiple_large_transfers() {
     //size_t size = 32;
     char *buffer = malloc(size);
     memset(buffer, '#', size);
-    libxclip_put(display, buffer, size);
+    libxclip_put(display, buffer, size, NULL);
     // printf("xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c\n");
     system("(xclip -o -se c | wc -c)"
            "& (xclip -o -se c | wc -c)"

@@ -32,7 +32,7 @@ void main() {
 
     char *data = "Hello, World!";
     print("Putting some data 'in the clipboard'");
-    libxclip_put(display, data, len(data));
+    libxclip_put(display, data, len(data), NULL);
     // If the use does CTRL-P in some other application it will paste "Hello, World!"
 }
 ```
@@ -41,7 +41,7 @@ This even works *after* the C program terminates, because (now comes some techni
 
 The functions signature is as follows:
 ```C
-pid_t libxclip_put(Display *display, char *data, size_t len)
+int libxclip_put(Display *display, char *data, size_t len, PutOptions *options);
 ```
 
 where
@@ -49,6 +49,7 @@ where
 - `display` The connection to the XServer.
 - `data` Points to the data that you want to "put on the clipboard".
 - `len` The size of `data` in number of bytes.
+- `PutOptions` Can be used in future versions to pass options to `libxclip_put`. Right now it does nothing and you can just pass in `NULL`.
 
 You as the caller is responsible for freeing `data` when you no longer need it. `libxclip_put` copies `data` to memory it owns (on modern Linux: does a copy-on-write of `data`. [See this post](https://stackoverflow.com/questions/27161412/how-does-copy-on-write-work-in-fork)) and so you need not worry about freeing `data` before `libxclip_put` is done with it.
 
@@ -56,7 +57,7 @@ Similarly `XClose(display)` won't cause problems.
 
 ### return value
 
-The `pid` of the child process that was created to handle selection request. Right now there's no clear use for it.
+An `int` to signal if some error occurred, however, right now we don't report any errors (TODO) and so the return value is always `0` and you shouldn't pay it any mind.
 
 ## Installing
 
