@@ -14,11 +14,6 @@
 // pid of the child process, of 0 if we're still in the parent process
 pid_t pid = 0;
 
-enum TransferState {
-    STATE_NONE = 0,
-    STATE_INCR = 1,
-};
-
 // The selection we hold may be so large we have to transfer it in chunks, in which
 // case we have to keep track of our ongoing transfers. We do this with this struct,
 // which forms a linked list
@@ -27,49 +22,46 @@ struct transfer
     // The window associated with the requestor, this should be all that's needed
     // to uniquely identify a requestor
     Window requestor_window;
-    enum TransferState state;
-    Atom property;
+    Atom property; // The property where we're supposed "put" the chunk
     size_t bytes_transfered;
     struct transfer *next;
 };
 
-struct transfer *get_transfer(struct transfer **first_transfer, Window requestor_window) {
-    struct transfer *current = *first_transfer;
+// Returns a transfer whose requestor_window is the one specified, or NULL of no
+// such transfer was found.
+struct transfer *get_transfer(struct transfer **head, Window requestor_window) {
+    struct transfer *current = *head;
 
     while (current != NULL) {
         if (current->requestor_window == requestor_window) {
-            #ifdef DEBUG
-            printf("get_transfer: found an existing requestor with window: %ld\n", requestor_window);
-            #endif
-
             return current;
         }
         current = current->next;
     }
 
-    #ifdef DEBUG
-    printf("get_transfer_state: Regestering a new requestor with window: %ld\n", requestor_window);
-    #endif
-
-    struct transfer *new_transfer = malloc(sizeof(struct transfer));
-    new_transfer->requestor_window = requestor_window;
-    new_transfer->state = STATE_NONE;
-    new_transfer->property = 0;
-    new_transfer->bytes_transfered = 0;
-    new_transfer->next = *first_transfer;
-    *first_transfer = new_transfer;
-
-    return *first_transfer;
+    return NULL;
 }
 
-void delete_transfer(struct transfer **first_transfer, struct transfer *transfer) {
-    if ((*first_transfer)->requestor_window == transfer->requestor_window) {
-        free(*first_transfer);
-        *first_transfer = NULL;
+// Make a new transfer.
+// An invariant is that no existing transfer with that requestor_window property
+// exists already.
+void new_transfer(struct transfer **head, Window requestor_window, Atom property) {
+    struct transfer *new_transfer = malloc(sizeof(struct transfer));
+    new_transfer->requestor_window = requestor_window;
+    new_transfer->property = property;
+    new_transfer->bytes_transfered = 0;
+    new_transfer->next = *head;
+    *head = new_transfer;
+}
+
+void delete_transfer(struct transfer **head, struct transfer *transfer) {
+    if ((*head)->requestor_window == transfer->requestor_window) {
+        *head = transfer->next;
+        free(transfer);
     }
 
     struct transfer *past = NULL;
-    struct transfer *current = *first_transfer;
+    struct transfer *current = *head;
     while (current != NULL) {
         if (current->requestor_window == transfer->requestor_window) {
             past->next = current->next;
@@ -397,17 +389,17 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
                                A_CLIPBOARD,
                                XInternAtom(display, "UTF8_STRING", False));
 
-            // We register that we have a new transfer in progress
+            // Do we have an ongoing transfer already?
             struct transfer *t = get_transfer(&transfers, event.xselectionrequest.requestor);
-
-            // Is there an ongoing transfer already?
-            if (t->state != STATE_NONE) {
+            if (t != NULL) {
                 // TODO: handle somehow
-                // assert(False); TODO: add me back
+                assert(False);
             }
 
-            t->state = STATE_INCR;
-            t->property = event.xselectionrequest.property; // ??
+            // We don't have an ongoig transfer already, so register this one
+            new_transfer(&transfers,
+                         event.xselectionrequest.requestor,
+                         event.xselectionrequest.property);
 
             continue;
         }
@@ -421,17 +413,11 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
             #endif
 
             struct transfer *t = get_transfer(&transfers, event.xproperty.window);
-            if (t->state == STATE_NONE) {
+            if (t == NULL) {
                 #ifdef DEBUG
                 printf("PropertyNotify is not concearning an ongoing transfer of ours, not interested.\n");
                 #endif
-                delete_transfer(&transfers, t);
                 continue;
-            }
-
-            // TODO: handle
-            if (t->state != STATE_INCR) {
-                assert(False);
             }
 
             // This should never happen
