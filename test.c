@@ -109,7 +109,7 @@ void _009000_handles_TARGETS() {
 }
 
 void _010000_handles_large_data() {
-    printf("\n\n=== libxclip can handle sucessively larger and larger data\n");
+    printf("\n\n=== libxclip can handle sucessively larger and larger data===\n");
     const unsigned long n = 25;
     char *buffer = malloc(1 << n);
     memset(buffer, '#', 1 << n);
@@ -119,9 +119,29 @@ void _010000_handles_large_data() {
         printf("%ld: ", len);
         fflush(stdout);
         libxclip_put(display, buffer, len);
-        system("xclip -o -selection clipboard -target UTF8_STRING | wc -c");
+        system("xclip -o -selection clipboard | wc -c");
         printf("\n");
     }
+}
+
+void _011000_multiple_large_transfers() {
+    printf("\n\n=== libxclip can handle multiple large transfers at the same time===\n");
+    size_t size = 1 << 25;
+    //size_t size = 32;
+    char *buffer = malloc(size);
+    memset(buffer, '#', size);
+    libxclip_put(display, buffer, size);
+    // printf("xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c\n");
+    system("(xclip -o -se c | wc -c)"
+           "& (xclip -o -se c | wc -c)"
+           "& (xclip -o -se c | wc -c)"
+           "& (xclip -o -se c | wc -c)"
+           "& (xclip -o -se c | wc -c)"
+           "& (xclip -o -se c | wc -c)"
+           "& (xclip -o -se c | wc -c)"
+           "& (xclip -o -se c | wc -c)"
+           "& (xclip -o -se c | wc -c)"
+           "& (xclip -o -se c | wc -c)");
 }
 
 int main(void) {
@@ -162,6 +182,9 @@ int main(void) {
     }
     if(strcmp(buffer, "01000\n") == 0) {
         _010000_handles_large_data();
+    }
+    if(strcmp(buffer, "01100\n") == 0) {
+        _011000_multiple_large_transfers();
     }
 
     return 0;
