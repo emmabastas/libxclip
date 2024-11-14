@@ -83,7 +83,7 @@ void delete_transfer(struct transfer **first_transfer, struct transfer *transfer
     assert(False);
 }
 
-void xclipboard_respond(XEvent request, Atom property) {
+void xclipboard_respond(XEvent request, Atom property, Atom selection, Atom target) {
     XEvent response;
 
     //  Perhaps FIXME: According to ICCCM section 2.5, we should
@@ -92,22 +92,39 @@ void xclipboard_respond(XEvent request, Atom property) {
     //  so would require an error handler which modifies a global
     //  variable, plus doing XSync after each XChangeProperty.
 
-    // Set values for the response
-    response.xselection.property  = property;
-    response.xselection.type      = SelectionNotify;
-    response.xselection.display   = request.xselectionrequest.display;
-    response.xselection.requestor = request.xselectionrequest.requestor;
-    response.xselection.selection = request.xselectionrequest.selection;
-    response.xselection.target    = request.xselectionrequest.target;
-    response.xselection.time      = request.xselectionrequest.time;
+    if (request.type == SelectionRequest) {
+        response.xselection.property  = property;
+        response.xselection.type      = SelectionNotify;
+        response.xselection.display   = request.xselectionrequest.display;
+        response.xselection.requestor = request.xselectionrequest.requestor;
+        response.xselection.selection = selection;
+        response.xselection.target    = target;
+        response.xselection.time      = request.xselectionrequest.time;
 
-    // send the response event
-    XSendEvent(request.xselectionrequest.display,
-               request.xselectionrequest.requestor,
-               True,
-               0,
-               &response);
-    // TODO what errors can this generate?
+        XSendEvent(request.xselectionrequest.display,
+                   request.xselectionrequest.requestor,
+                   True,
+                   0,
+                   &response);
+    }
+    else if (request.type == PropertyNotify) {
+        response.xselection.property  = property;
+        response.xselection.type      = SelectionNotify;
+        response.xselection.display   = request.xproperty.display;
+        response.xselection.requestor = request.xproperty.window;
+        response.xselection.selection = selection;
+        response.xselection.target    = target;
+        response.xselection.time      = request.xproperty.time;
+
+        XSendEvent(request.xproperty.display,
+                   request.xproperty.window,
+                   True,
+                   0,
+                   &response);
+    }
+    else {
+        assert(False);
+    }
 
     XFlush(request.xselectionrequest.display);
     // TODO what errors can this generate?
@@ -308,7 +325,10 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
             // TODO: XChangeProperty() can generate BadAlloc, BadAtom, BadMatch, BadValue, and BadWindow errors.
 
             // Now we send the response
-            xclipboard_respond(event, event.xselectionrequest.property);
+            xclipboard_respond(event,
+                               event.xselectionrequest.property,
+                               XInternAtom(display, "CLIPBOARD", False),
+                               XInternAtom(display, "TARGETS", False));
 
             continue;
         }
@@ -332,7 +352,10 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
                             (int) len);
             // TODO: XChangeProperty() can generate BadAlloc, BadAtom, BadMatch, BadValue, and BadWindow errors.
 
-            xclipboard_respond(event, event.xselectionrequest.property);
+            xclipboard_respond(event,
+                               event.xselectionrequest.property,
+                               XInternAtom(display, "CLIPBOARD", False),
+                               XInternAtom(display, "UTF8_STRING", False));
 
             continue;
         }
@@ -363,7 +386,10 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
             // its properties.
             XSelectInput(display, event.xselectionrequest.requestor, PropertyChangeMask);
 
-            xclipboard_respond(event, event.xselectionrequest.property);
+            xclipboard_respond(event,
+                               event.xselectionrequest.property,
+                               XInternAtom(display, "CLIPBOARD", False),
+                               XInternAtom(display, "UTF8_STRING", False));
 
             // We register that we have a new transfer in progress
             struct transfer *t = get_transfer(&transfers, event.xselectionrequest.requestor);
@@ -429,26 +455,10 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
 
             t->bytes_transfered = t->bytes_transfered + this_chunk_size;
 
-            // Set values for the response
-            XEvent response;
-            response.xselection.property  = t->property;
-            response.xselection.type      = SelectionNotify;
-            response.xselection.display   = event.xproperty.display;
-            response.xselection.requestor = event.xproperty.window;
-            response.xselection.selection = XInternAtom(display, "CLIPBOARD", False);
-            response.xselection.target    = XInternAtom(display, "UTF8_STRING", False);
-            response.xselection.time      = event.xproperty.time;
-
-            // send the response event
-            XSendEvent(event.xproperty.display,
-                       event.xproperty.window,
-                       True,
-                       0,
-                       &response);
-            // TODO what errors can this generate?
-
-            XFlush(event.xproperty.display);
-            // TODO what errors can this generate?
+            xclipboard_respond(event,
+                               t->property,
+                               XInternAtom(display, "CLIPBOARD", False),
+                               XInternAtom(display, "UTF8_STRING", False));
 
             XSync(display, False);
 
@@ -463,7 +473,10 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
             printf("Got a selection request with target = %s. We do not support this target\n", target_name);
             #endif
 
-            xclipboard_respond(event, None);
+            xclipboard_respond(event,
+                               None,
+                               XInternAtom(display, "CLIPBOARD", False),
+                               event.xselection.target);
 
             continue;
         }
