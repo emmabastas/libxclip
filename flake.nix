@@ -30,6 +30,7 @@
             buildInputs = with pkgs; [
               gcc
               pkg-config
+              cpplint
               xorg.xorgproto
               xorg.libX11
               xorg.libXmu
