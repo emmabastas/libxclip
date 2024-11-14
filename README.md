@@ -65,13 +65,13 @@ Right now there is no packaging for any linux distro (maybe you can help me with
 
 1) Copy `libxclip.c` and `libxclip.h` into you project.
 2) Add `#include "libxclip.h"` wherever you use it.
-3) Make sure you have required dependencies installed (`libX11` and `libXmu`?)
-4) Whatever command you use to compile you project, add `libclip.c` as an input file, add `-lX11` and `-lXmu` flags.
+3) Make sure you have required dependencies installed (`libX11`)
+4) Whatever command you use to compile you project, add `libclip.c` as an input file, and add a `-lX11` flag.
 
 For instance, I'm compiling this repository's test-suite with
 
 ```sh
-gcc -Og -Wall -Wno-unused-result -lX11 -lXmu libxclip.c test.c -o test
+gcc -Og -Wall -Wno-unused-result -lX11 libxclip.c test.c -o test
 ```
 
 These "installation" instruction are not very clear, I'm sorry.. Just ask me if you'd like help.
