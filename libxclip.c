@@ -47,6 +47,17 @@ struct transfer *get_transfer(struct transfer **head, Window requestor_window) {
 // exists already.
 void new_transfer(struct transfer **head, Window requestor_window, Atom property) {
     struct transfer *new_transfer = malloc(sizeof(struct transfer));
+
+    if (new_transfer == NULL) { // couldn't allocate memory. Pretty fatal
+        #ifdef DEBUG
+        printf("COULDN'T ALLOCATE MEMORY");
+        assert(False);
+        #endif
+
+        // TODO: Is this the right way to do it?
+        exit(1);
+    }
+
     new_transfer->requestor_window = requestor_window;
     new_transfer->property = property;
     new_transfer->bytes_transfered = 0;
@@ -58,6 +69,7 @@ void delete_transfer(struct transfer **head, struct transfer *transfer) {
     if ((*head)->requestor_window == transfer->requestor_window) {
         *head = transfer->next;
         free(transfer);
+        return;
     }
 
     struct transfer *past = NULL;
@@ -157,7 +169,16 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
         #endif
 
         char buf;
-        read(pipefd[0], &buf, 1);
+        int ret = read(pipefd[0], &buf, 1);
+
+        if (ret == -1) { // indactes an error occured and errno has been set
+            #ifdef DEBUG
+            printf("Error occured reading from pipe :-(\n");
+            assert(False);
+            #endif
+
+            // TODO: do something to indicate an error occured?
+        }
 
         #ifdef DEBUG
         printf("Child process is done with setup\n");
@@ -244,9 +265,18 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
     // TODO: We can probably let the parent resume earlier than this, but let's
     // stay safe for now
     XSync(display, False);
-    write(pipefd[1], "1", 1); // Notify parent
+    ret = write(pipefd[1], "1", 1); // Notify parent
     close(pipefd[0]);
     close(pipefd[1]);
+
+    if (ret == -1) { // inducates an error occured an errno has been set
+        #ifdef DEBUG
+        printf("Error occured writing to pipe :-(\n");
+        #endif
+
+        // TODO: If this happens it means we cannot communicate to the parent
+        // process?? What do we do then?
+    }
 
     XEvent event;
     while (True) {
