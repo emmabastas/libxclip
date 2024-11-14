@@ -242,6 +242,12 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
     // The head of the linked list that keeps track of all ongoing INCR transfers.
     struct transfer *transfers = NULL;
 
+    // Intern some atoms
+    const Atom A_CLIPBOARD = XInternAtom(display, "CLIPBOARD", False);
+    const Atom A_TARGETS = XInternAtom(display, "TARGETS", False);
+    const Atom A_UTF8_STRING = XInternAtom(display, "UTF8_STRING", False);
+    const Atom A_INCR = XInternAtom(display, "INCR", False);
+
     // Now we're ready for the parent process to return to the caller
     // TODO: We can probably let the parent resume earlier than this, but let's
     // stay safe for now
@@ -293,7 +299,7 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
         // instance if we support a png target maybe the application would like to
         // insert an image instead of text for the user.
         if (event.type == SelectionRequest
-            && target == XInternAtom(display, "TARGETS", False)) {
+            && target == A_TARGETS) {
             #ifdef DEBUG
             printf("Got a selection request with target = TARGETS\n");
             #endif
@@ -309,8 +315,8 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
             // - text/plain
             // - text/plain;charset=utf-8
             Atom types[2] = {
-                XInternAtom(display, "TARGETS", False),
-                XInternAtom(display, "UTF8_STRING", False)
+                A_TARGETS,
+                A_UTF8_STRING,
             };
 
             // put the response contents into the request's property
@@ -327,7 +333,7 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
             // Now we send the response
             xclipboard_respond(event,
                                event.xselectionrequest.property,
-                               XInternAtom(display, "CLIPBOARD", False),
+                               A_CLIPBOARD,
                                XInternAtom(display, "TARGETS", False));
 
             continue;
@@ -354,7 +360,7 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
 
             xclipboard_respond(event,
                                event.xselectionrequest.property,
-                               XInternAtom(display, "CLIPBOARD", False),
+                               A_CLIPBOARD,
                                XInternAtom(display, "UTF8_STRING", False));
 
             continue;
@@ -375,7 +381,7 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
             XChangeProperty(display,
                             event.xselectionrequest.requestor,
                             event.xselectionrequest.property,
-                            XInternAtom(display, "INCR", False),
+                            A_INCR,
                             32,
                             PropModeReplace,
                             0,
@@ -388,7 +394,7 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
 
             xclipboard_respond(event,
                                event.xselectionrequest.property,
-                               XInternAtom(display, "CLIPBOARD", False),
+                               A_CLIPBOARD,
                                XInternAtom(display, "UTF8_STRING", False));
 
             // We register that we have a new transfer in progress
@@ -457,7 +463,7 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
 
             xclipboard_respond(event,
                                t->property,
-                               XInternAtom(display, "CLIPBOARD", False),
+                               A_CLIPBOARD,
                                XInternAtom(display, "UTF8_STRING", False));
 
             XSync(display, False);
@@ -475,7 +481,7 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
 
             xclipboard_respond(event,
                                None,
-                               XInternAtom(display, "CLIPBOARD", False),
+                               A_CLIPBOARD,
                                event.xselection.target);
 
             continue;
