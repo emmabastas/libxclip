@@ -452,8 +452,6 @@ pid_t libxclip_put(Display *display, char *data, size_t len) {
                                A_CLIPBOARD,
                                XInternAtom(display, "UTF8_STRING", False));
 
-            XSync(display, False);
-
             continue;
         }
 
