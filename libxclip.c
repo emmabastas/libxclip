@@ -1,13 +1,17 @@
 #include "libxclip.h"
 
 #include <stdlib.h>
-#include <unistd.h>
-#include <assert.h>
-#include <stdio.h>
-#include <stdio_ext.h> // for __fpurge
+#include <assert.h>     // for assert
+#include <unistd.h>     // for fork, read, write and pipe
+#include <stdio_ext.h>  // for __fpurge
 #include <X11/Xlib.h>
 
 // #define DEBUG
+
+#ifdef DEBUG
+// for fprintf -- even though stdio_ext.h include stdio.h for us
+#include <stdio.h>
+#endif
 
 // pid of the child process, of 0 if we're still in the parent process
 pid_t pid = 0;
