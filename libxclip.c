@@ -17,13 +17,13 @@ struct PutOptions {
     char phantom; // Just here to remove -pedantic warning
 };
 
-// The selection we hold may be so large we have to transfer it in chunks, in which
-// case we have to keep track of our ongoing transfers. We do this with this struct,
-// which forms a linked list
+// The selection we hold may be so large we have to transfer it in chunks, in
+// which case we have to keep track of our ongoing transfers. We do this with
+// this struct, which forms a linked list.
 struct transfer
 {
-    // The window associated with the requestor, this should be all that's needed
-    // to uniquely identify a requestor
+    // The window associated with the requestor, this should be all that's
+    // needed to uniquely identify a requestor.
     Window requestor_window;
     Atom property; // The property where we're supposed "put" the chunk
     size_t bytes_transfered;
@@ -48,7 +48,7 @@ struct transfer *get_transfer(struct transfer **head, Window requestor_window) {
 // Make a new transfer.
 // An invariant is that no existing transfer with that requestor_window property
 // exists already.
-void new_transfer(struct transfer **head, Window requestor_window, Atom property) {
+void new_transfer(struct transfer **head, Window window, Atom property) {
     struct transfer *new_transfer = malloc(sizeof(struct transfer));
 
     if (new_transfer == NULL) { // couldn't allocate memory. Pretty fatal
@@ -61,7 +61,7 @@ void new_transfer(struct transfer **head, Window requestor_window, Atom property
         exit(1);
     }
 
-    new_transfer->requestor_window = requestor_window;
+    new_transfer->requestor_window = window;
     new_transfer->property = property;
     new_transfer->bytes_transfered = 0;
     new_transfer->next = *head;
@@ -90,7 +90,10 @@ void delete_transfer(struct transfer **head, struct transfer *transfer) {
     assert(False);
 }
 
-void xclipboard_respond(XEvent request, Atom property, Atom selection, Atom target) {
+void xclipboard_respond(XEvent request,
+                        Atom property,
+                        Atom selection,
+                        Atom target) {
     XEvent response;
 
     //  Perhaps FIXME: According to ICCCM section 2.5, we should
@@ -137,28 +140,34 @@ void xclipboard_respond(XEvent request, Atom property, Atom selection, Atom targ
     // TODO what errors can this generate?
 }
 
-int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) {
+int libxclip_put(Display *display,
+                 char *data,
+                 size_t len,
+                 PutOptions *options) {
 
     // The first thing we do, in an attempt to avoid race conditions,
-    // missed events, and so on, is to create the child process and then have the
-    // parent process freeze until the child process has performed all it's setup
+    // missed events, and so on, is to create the child process and then have
+    // the parent process freeze until the child process has performed all it's
+    // setup.
 
-    // NB. The selections contents are stored in `data` and the child process will of
-    // course read from this. What happens though in the case that the parent process
-    // exits before the child process is finished? One might think that all data all-
-    // ocated by the parent process is freed, including what `data` points to. This
-    // is true in some sense, but `fork` performs a copy-on-write duplication on all
-    // of the heap contents from the parent process to the child process. This means:
+    // NB. The selections contents are stored in `data` and the child process
+    // will of course read from this. What happens though in the case that the
+    // parent process exits before the child process is finished? One might
+    // think that all data allocated by the parent process is freed, including
+    // what `data` points to. This is true in some sense, but `fork` performs a
+    // copy-on-write duplication on all of the heap contents from the parent
+    // process to the child process. This means:
     // 1) If the parent process never writes to `data` after having called
     //    `xlipboard_persit` then no copies are made of that data, yet the child
-    //    process still has acess to it after the parent process exited. AWESOME!
-    // 2) If the parent process does write then the `data` is copied, and the child
-    //    process will continue to acess the original contents.
-    // See: https://unix.stackexchange.com/questions/155017/does-fork-immediately-copy-the-entire-process-heap-in-linux
+    //    process still has acess to it after the parent process exited. COOL!
+    // 2) If the parent process does write then the `data` is copied, and the
+    //    child process will continue to acess the original contents.
+    // See:
+    // https://unix.stackexchange.com/questions/155017/does-fork-immediately-copy-the-entire-process-heap-in-linux
     // THAT'S SO COOL
 
-    // We'll use these pipes for the child process to thell the parent that it can
-    // resume.
+    // We'll use these pipes for the child process to thell the parent that it
+    // can resume.
     int pipefd[2];
     int ret = pipe(pipefd);
     if (ret == -1) {
@@ -168,7 +177,8 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
     pid_t pid = fork();
     if (pid != 0) {
         #ifdef DEBUG
-        printf("Waiting for child process to setup before returning to called\n");
+        printf("Waiting for child process to setup before returning to "
+               "caller\n");
         #endif
 
         char buf;
@@ -193,11 +203,11 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
         return 0;
     }
 
-    // Now that we're in the child process we re-open the connection to the display
-    // I'm not sure how this all works, if this is the correct thing to do. All I
-    // know is if I don't have this I run into problems and StackOverflow comments
-    // suggest that you "need one XOpenDisplay per thread", and that almost what
-    // we're doing here
+    // Now that we're in the child process we re-open the connection to the
+    // display I'm not sure how this all works, if this is the correct thing to
+    // do. All I know is if I don't have this I run into problems and
+    // StackOverflow comments suggest that you "need one XOpenDisplay per
+    // thread", and that almost what  we're doing here.
     Display *parent_display = display;
     display = XOpenDisplay(XDisplayString(parent_display));
 
@@ -207,9 +217,13 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
     const Atom A_UTF8_STRING = XInternAtom(display, "UTF8_STRING", False);
     const Atom A_INCR = XInternAtom(display, "INCR", False);
 
-    // A dummy window that exists only for us to intercept `SelectionRequest` events
-    Window window = XCreateSimpleWindow(display, DefaultRootWindow(display), 0, 0, 1, 1, 0, 0, 0);
-    // TODO: XCreateSimpleWindow can generate BadAlloc, BadMatch, BadValue, and BadWindow errors.
+    // A dummy window that exists only for us to intercept `SelectionRequest`
+    // events.
+    Window window = XCreateSimpleWindow(display,
+                                        DefaultRootWindow(display),
+                                        0, 0, 1, 1, 0, 0, 0);
+    // TODO: XCreateSimpleWindow can generate BadAlloc, BadMatch, BadValue, and
+    // BadWindow errors.
     // https://tronche.com/gui/x/xlib/window/XCreateWindow.html
 
     // take control of the selection so that we receive
@@ -236,8 +250,8 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
     // process starts by clearing the outout buffer to avoid this.
     __fpurge(stdout);
 
-    // Move into root, so that we don't cause any problems in case the directory
-    // we're currently in needs to be unmounted
+    // Move into root, so that we don't cause any problems in case the
+    // directory we're currently in needs to be unmounted
     int sucess = chdir("/");
     if (sucess == -1) {
         #ifdef DEBUG
@@ -252,7 +266,8 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
     //
     // We consider selections larger than a quarter of the maximum
     // request size to be "large". See ICCCM section 2.5
-    // FIXME: I think the chunk_size should be ~16x the size of what we currently do
+    // FIXME: I think the chunk_size should be ~16x the size of what we
+    //        currently do.
     //
     // First see if X supports extended-length encoding, it returns 0 if not
     size_t chunk_size = XExtendedMaxRequestSize(display) / 4;
@@ -261,7 +276,8 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
     // If this fails for some reason, we fallback to this
     if (!chunk_size) { chunk_size = 4096; }
 
-    // The head of the linked list that keeps track of all ongoing INCR transfers.
+    // The head of the linked list that keeps track of all ongoing INCR
+    // transfers.
     struct transfer *transfers = NULL;
 
     // Now we're ready for the parent process to return to the caller
@@ -292,8 +308,8 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
         // outside the period of time we have owned the selection.
 
         // We have lost ownership of the selection (for instance the user did a
-        // CTRL-C in some other application).
-        // There is nothing more for us to do, except complete any ongoing transfers
+        // CTRL-C in some other application).  There is nothing more for us to
+        // do, except complete any ongoing transfers.
         if (event.type == SelectionClear) {
             #ifdef DEBUG
             printf("Got a SelectionClear\n");
@@ -312,17 +328,18 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
             target = event.xselectionrequest.target;
 
             #ifdef DEBUG
-            target_name = XGetAtomName(display, event.xselectionrequest.target);
+            target_name = XGetAtomName(display,
+                                       event.xselectionrequest.target);
             // this is a memory leak but whatever we're in debug
             #endif
         }
 
-        // Some program asked us what kinds of formats (i.e. targets) we can send
-        // the selection contents in (like utf8, html, png, etc.).
-        // This can happen for instance when a user does CTRL-V in an application,
-        // usually the application wants to know what format the content is in, for
-        // instance if we support a png target maybe the application would like to
-        // insert an image instead of text for the user.
+        // Some program asked us what kinds of formats (i.e. targets) we can
+        // send the selection contents in (like utf8, html, png, etc.). This can
+        // happen for instance when a user does CTRL-V in an application,
+        // usually the application wants to know what format the content is in,
+        // for instance if we support a png target maybe the application would
+        // like to insert an image instead of text for the user.
         if (event.type == SelectionRequest
             && target == A_TARGETS) {
             #ifdef DEBUG
@@ -353,7 +370,8 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
                             PropModeReplace,
                             (unsigned char *) types,
                             (int) (sizeof(types) / sizeof(Atom)));
-            // TODO: XChangeProperty() can generate BadAlloc, BadAtom, BadMatch, BadValue, and BadWindow errors.
+            // TODO: XChangeProperty() can generate BadAlloc, BadAtom, BadMatch,
+            //       BadValue, and BadWindow errors.
 
             // Now we send the response
             xclipboard_respond(event,
@@ -364,13 +382,15 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
             continue;
         }
 
-        // The requestor asked us the send the contents of the selection as a UTF8
-        // string, and we can send the contents in one chunk
+        // The requestor asked us the send the contents of the selection as a
+        // UTF8 string, and we can send the contents in one chunk
         if (event.type == SelectionRequest
             && target == XInternAtom(display, "UTF8_STRING", False)
             && len <= chunk_size) {
             #ifdef DEBUG
-            printf("Got a selection request with target = %s and we can send the response in one chunk\n", target_name);
+            printf("Got a selection request with target = %s and we can send"
+                   "the response in one chunk\n",
+                   target_name);
             #endif
 
             XChangeProperty(display,
@@ -381,7 +401,8 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
                             PropModeReplace,
                             (unsigned char *) data,
                             (int) len);
-            // TODO: XChangeProperty() can generate BadAlloc, BadAtom, BadMatch, BadValue, and BadWindow errors.
+            // TODO: XChangeProperty() can generate BadAlloc, BadAtom, BadMatch,
+            //       BadValue, and BadWindow errors.
 
             xclipboard_respond(event,
                                event.xselectionrequest.property,
@@ -391,18 +412,20 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
             continue;
         }
 
-        // The requestor asked us the send the contents of the selection as a UTF8
-        // string, and we have to send it in multiple chunks.
+        // The requestor asked us the send the contents of the selection as a
+        // UTF8 string, and we have to send it in multiple chunks.
         if (event.type == SelectionRequest
             && target == XInternAtom(display, "UTF8_STRING", False)
             && len > chunk_size) {
             #ifdef DEBUG
-            printf("Got a selection request with target = %s but we can't send the response in one chunk\n", target_name);
+            printf("Got a selection request with target = %s but we can't send"
+                   "the response in one chunk\n",
+                   target_name);
             #endif
 
             // FIXME: instead of sending zero items we should send an integer
-            //        representing the lower bound on the number of bytes to send
-            //        ICCCM 2.7.2 INCR Properties.
+            //        representing the lower bound on the number of bytes to
+            //        send ICCCM 2.7.2 INCR Properties.
             XChangeProperty(display,
                             event.xselectionrequest.requestor,
                             event.xselectionrequest.property,
@@ -415,7 +438,9 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
             // With the INCR mechanism, we need to know
             // when the requestor window changes (deletes)
             // its properties.
-            XSelectInput(display, event.xselectionrequest.requestor, PropertyChangeMask);
+            XSelectInput(display,
+                         event.xselectionrequest.requestor,
+                         PropertyChangeMask);
 
             xclipboard_respond(event,
                                event.xselectionrequest.property,
@@ -423,7 +448,8 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
                                XInternAtom(display, "UTF8_STRING", False));
 
             // Do we have an ongoing transfer already?
-            struct transfer *t = get_transfer(&transfers, event.xselectionrequest.requestor);
+            struct transfer *t =
+                get_transfer(&transfers, event.xselectionrequest.requestor);
             if (t != NULL) {
                 // TODO: handle somehow
                 assert(False);
@@ -442,13 +468,16 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
         if (event.type == PropertyNotify
             && event.xproperty.state == PropertyDelete) {
             #ifdef DEBUG
-            printf("Got a PropertyNotify and it's state field is PropertyDelete\n");
+            printf("Got a PropertyNotify and it's state field is"
+                   "PropertyDelete\n");
             #endif
 
-            struct transfer *t = get_transfer(&transfers, event.xproperty.window);
+            struct transfer *t = get_transfer(&transfers,
+                                              event.xproperty.window);
             if (t == NULL) {
                 #ifdef DEBUG
-                printf("PropertyNotify is not concearning an ongoing transfer of ours, not interested.\n");
+                printf("PropertyNotify is not concearning an ongoing transfer"
+                       "of ours, not interested.\n");
                 #endif
                 continue;
             }
@@ -460,7 +489,8 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
 
             size_t left_to_transfer = len - t->bytes_transfered;
             size_t this_chunk_size = chunk_size;
-            unsigned char *this_data = (unsigned char*) data + t->bytes_transfered;
+            unsigned char *this_data =
+                (unsigned char*) data + t->bytes_transfered;
 
             if (left_to_transfer == 0) {
                 this_chunk_size = 0;
@@ -493,7 +523,8 @@ int libxclip_put(Display *display, char *data, size_t len, PutOptions *options) 
             && event.xselectionrequest.target != A_TARGETS
             && event.xselectionrequest.target != A_UTF8_STRING) {
             #ifdef DEBUG
-            printf("Got a selection request with target = %s. We do not support this target\n", target_name);
+            printf("Got a selection request with target = %s. We do not support"
+                   "this target\n", target_name);
             #endif
 
             xclipboard_respond(event,
