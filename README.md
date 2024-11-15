@@ -98,7 +98,7 @@ Yes please :-) If you want to implement some feature and so on, please don't hes
 
 ## License
 
-The source code is based off of [xclip](https://github.com/astrand/xclip) which is licensed under GNU GPL, and any additions/modifications by me are also licensed under GNU GPL.
+The source code is based off of [xclip](https://github.com/astrand/xclip) which is licensed under GNU GPLv2 or later. The code in this repository is (re)licensed under GNU GPLv3 or later.
 
 ## TODO
 
@@ -106,4 +106,4 @@ The source code is based off of [xclip](https://github.com/astrand/xclip) which 
 - [ ] Package for common Linux distros
 - [ ] Implement a `libxclip_get`?
 - [ ] Proper documentation (like a man-page?)
-- [ ] Do the licensing properly (add LICENSE file and license comments on top of files)
+- [X] Do the licensing properly (add LICENSE file and license comments on top of files)
