@@ -1,4 +1,4 @@
-#include "libxclip.h"
+#include "./libxclip.h"
 
 #include <stdlib.h>
 #include <assert.h>     // for assert
@@ -14,18 +14,17 @@
 #endif
 
 struct PutOptions {
-    char phantom; // Just here to remove -pedantic warning
+    char phantom;  // Just here to remove -pedantic warning
 };
 
 // The selection we hold may be so large we have to transfer it in chunks, in
 // which case we have to keep track of our ongoing transfers. We do this with
 // this struct, which forms a linked list.
-struct transfer
-{
+struct transfer {
     // The window associated with the requestor, this should be all that's
     // needed to uniquely identify a requestor.
     Window requestor_window;
-    Atom property; // The property where we're supposed "put" the chunk
+    Atom property;  // The property where we're supposed "put" the chunk
     size_t bytes_transfered;
     struct transfer *next;
 };
@@ -51,7 +50,7 @@ struct transfer *get_transfer(struct transfer **head, Window requestor_window) {
 void new_transfer(struct transfer **head, Window window, Atom property) {
     struct transfer *new_transfer = malloc(sizeof(struct transfer));
 
-    if (new_transfer == NULL) { // couldn't allocate memory. Pretty fatal
+    if (new_transfer == NULL) {  // couldn't allocate memory. Pretty fatal
         #ifdef DEBUG
         printf("COULDN'T ALLOCATE MEMORY");
         assert(False);
@@ -116,8 +115,7 @@ void xclipboard_respond(XEvent request,
                    True,
                    0,
                    &response);
-    }
-    else if (request.type == PropertyNotify) {
+    } else if (request.type == PropertyNotify) {
         response.xselection.property  = property;
         response.xselection.type      = SelectionNotify;
         response.xselection.display   = request.xproperty.display;
@@ -131,8 +129,7 @@ void xclipboard_respond(XEvent request,
                    True,
                    0,
                    &response);
-    }
-    else {
+    } else {
         assert(False);
     }
 
@@ -144,7 +141,6 @@ int libxclip_put(Display *display,
                  char *data,
                  size_t len,
                  PutOptions *options) {
-
     // The first thing we do, in an attempt to avoid race conditions,
     // missed events, and so on, is to create the child process and then have
     // the parent process freeze until the child process has performed all it's
@@ -184,7 +180,7 @@ int libxclip_put(Display *display,
         char buf;
         int ret = read(pipefd[0], &buf, 1);
 
-        if (ret == -1) { // indactes an error occured and errno has been set
+        if (ret == -1) {  // indactes an error occured and errno has been set
             #ifdef DEBUG
             printf("Error occured reading from pipe :-(\n");
             assert(False);
@@ -272,9 +268,13 @@ int libxclip_put(Display *display,
     // First see if X supports extended-length encoding, it returns 0 if not
     size_t chunk_size = XExtendedMaxRequestSize(display) / 4;
     // Otherwise, try the normal encoding
-    if (!chunk_size) { chunk_size = XMaxRequestSize(display) / 4; }
+    if (!chunk_size) {
+        chunk_size = XMaxRequestSize(display) / 4;
+    }
     // If this fails for some reason, we fallback to this
-    if (!chunk_size) { chunk_size = 4096; }
+    if (!chunk_size) {
+        chunk_size = 4096;
+    }
 
     // The head of the linked list that keeps track of all ongoing INCR
     // transfers.
@@ -284,11 +284,11 @@ int libxclip_put(Display *display,
     // TODO: We can probably let the parent resume earlier than this, but let's
     // stay safe for now
     XSync(display, False);
-    ret = write(pipefd[1], "1", 1); // Notify parent
+    ret = write(pipefd[1], "1", 1);  // Notify parent
     close(pipefd[0]);
     close(pipefd[1]);
 
-    if (ret == -1) { // inducates an error occured an errno has been set
+    if (ret == -1) {  // inducates an error occured an errno has been set
         #ifdef DEBUG
         printf("Error occured writing to pipe :-(\n");
         #endif
@@ -320,7 +320,7 @@ int libxclip_put(Display *display,
             // TODO handle remaining transfers
         }
 
-        int target = 0; // Initialized only to avoid -Wmaybe-uninitialized
+        int target = 0;  // Initialized only to avoid -Wmaybe-uninitialized
         #ifdef DEBUG
         char *target_name = "";
         #endif
