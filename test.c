@@ -157,6 +157,7 @@ void _011000_multiple_large_transfers() {
            "& (xclip -o -se c | wc -c)"
            "& (xclip -o -se c | wc -c)"
            "& (xclip -o -se c | wc -c)");
+    usleep(1000);  // Just to make sure the previous `system` call had time to output everyting
 }
 
 void _012000_read_and_steal() {
@@ -209,7 +210,7 @@ void _012000_read_and_steal() {
                        &out_buffer);
     assert(property_type == XInternAtom(display, "INCR", False));
 
-    printf("Setting the selection owner to None");
+    printf("Setting the selection owner to None.\n");
     XSetSelectionOwner(display, XInternAtom(display, "CLIPBOARD", False), None, CurrentTime);
 
     printf("Doing XDeleteProperty, signaling that we're ready for a new chunk.\n");
@@ -228,6 +229,7 @@ void _012000_read_and_steal() {
     gotevent:
     XNextEvent(display, &event);
     assert(event.type == SelectionNotify);
+    printf("Success!\n");
 }
 
 int main(void) {

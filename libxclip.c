@@ -250,6 +250,12 @@ int libxclip_put(Display *display,
     }
     // TODO: Can XGetSelectionOwner generate an error.
 
+    // As long as we are the selection owner the child process waits for more
+    // SelectionRequest's. However, as soon as we know we're no longer the owner
+    // we stop accepting new SelectionRequest, only sticking around so that we
+    // can complete transfers already in progress.
+    Bool selection_owner = True;
+
     XSelectInput(display, window, PropertyChangeMask);
     // TODO: XSelectInput() can generate a BadWindow error.
     // https://tronche.com/gui/x/xlib/event-handling/XSelectInput.html
@@ -314,10 +320,35 @@ int libxclip_put(Display *display,
 
     XEvent event;
     while (True) {
+        // We are no longer the selection owner and we have no ongoing
+        // transfers, time to exit this child process.
+        if (selection_owner == False && transfers == NULL) {
+            #ifdef DEBUG
+            printf("Exiting child process.\n");
+            #endif
+            _Exit(3);
+        }
+
         XNextEvent(display, &event);
         #ifdef DEBUG
         printf("Got an event\n");
         #endif
+
+        // Someone is making a SelectionRequest but we're no longer the
+        // selection's owner. Refuse the request.
+        if (selection_owner == False && event.type == SelectionRequest) {
+            #ifdef DEBUG
+            printf("Got a SelectionRequest when we're no longer the owner, "
+                   "refusing.\n");
+            #endif
+
+            xclipboard_respond(event,
+                               None,
+                               A_CLIPBOARD,
+                               event.xselection.target);
+
+            continue;
+        }
 
         // FIXME: ICCCM 2.2: check evt.time and refuse requests from
         // outside the period of time we have owned the selection.
@@ -330,9 +361,8 @@ int libxclip_put(Display *display,
             printf("Got a SelectionClear\n");
             #endif
 
-            _Exit(3);
-
-            // TODO handle remaining transfers
+            selection_owner = False;
+            continue;
         }
 
         int target = 0;  // Initialized only to avoid -Wmaybe-uninitialized
@@ -507,9 +537,13 @@ int libxclip_put(Display *display,
             unsigned char *this_data =
                 (unsigned char*) data + t->bytes_transfered;
 
+            // We have no data left to transfer, and we should send one last
+            // empty chunk to signal to the requestor that the transfer is
+            // complete.
             if (left_to_transfer == 0) {
                 this_chunk_size = 0;
                 this_data = 0;
+                // At the end of this block we also do `delete_transfer`
             } else if (left_to_transfer < chunk_size) {
                 this_chunk_size = left_to_transfer;
             }
@@ -529,6 +563,10 @@ int libxclip_put(Display *display,
                                t->property,
                                A_CLIPBOARD,
                                XInternAtom(display, "UTF8_STRING", False));
+
+            if (left_to_transfer == 0) {
+                delete_transfer(&transfers, t);
+            }
 
             continue;
         }
