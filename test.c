@@ -20,6 +20,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdio_ext.h> // for __fpurge
+#include <assert.h>
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 
@@ -146,7 +147,6 @@ void _011000_multiple_large_transfers() {
     char *buffer = malloc(size);
     memset(buffer, '#', size);
     libxclip_put(display, buffer, size, NULL);
-    // printf("xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c & xclip -o -selection -clipboard | wc -c\n");
     system("(xclip -o -se c | wc -c)"
            "& (xclip -o -se c | wc -c)"
            "& (xclip -o -se c | wc -c)"
@@ -157,6 +157,77 @@ void _011000_multiple_large_transfers() {
            "& (xclip -o -se c | wc -c)"
            "& (xclip -o -se c | wc -c)"
            "& (xclip -o -se c | wc -c)");
+}
+
+void _012000_read_and_steal() {
+    printf("\n\n=== libxclip should complete ongoing transfers evevn after having lost ownership of the selection\n");
+
+    size_t inbuffer_size = 1 << 25;
+    char *inbuffer = malloc(inbuffer_size);
+    memset(inbuffer, '#', inbuffer_size);
+
+    printf("Doing libxclip_but with a buffer large enough to require INCR.\n");
+    libxclip_put(display, inbuffer, inbuffer_size, NULL);
+
+    Atom property = XInternAtom(display, "LIBXCLIP_DATA", False);
+
+    Window window = XCreateSimpleWindow(display,
+                                        DefaultRootWindow(display),
+                                        0, 0, 1, 1, 0, 0, 0);
+
+    printf("Doing XConvertSelection.\n");
+    XConvertSelection(display,
+                      XInternAtom(display, "CLIPBOARD", False),
+                      XInternAtom(display, "UTF8_STRING", False),
+                      property,
+                      window,
+                      CurrentTime);
+
+    printf("Doing XNextEvent and asserting it's type is SelectionNotify.\n");
+    XEvent event;
+    XNextEvent(display, &event);
+    assert(event.type == SelectionNotify);
+
+    printf("Doing XGetWindowProperty and asserting the property type is INCR.\n");
+    Atom property_type;
+    int format;
+    unsigned long nitems;
+    unsigned long bytes_after;
+    unsigned char *out_buffer;
+
+    XGetWindowProperty(display,
+                       window,
+                       property,
+                       0,
+                       4096 / 4,
+                       False,
+                       AnyPropertyType,
+                       &property_type,
+                       &format,
+                       &nitems,
+                       &bytes_after,
+                       &out_buffer);
+    assert(property_type == XInternAtom(display, "INCR", False));
+
+    printf("Setting the selection owner to None");
+    XSetSelectionOwner(display, XInternAtom(display, "CLIPBOARD", False), None, CurrentTime);
+
+    printf("Doing XDeleteProperty, signaling that we're ready for a new chunk.\n");
+    XDeleteProperty(display, window, property);
+
+    printf("Doing XNextEvent with a (2sec timeout) and asserting it's type is SelectionNotify.\n");
+
+    for (int i = 0; i < 10; i++) {
+        if(XPending(display) != 0) {
+            goto gotevent;
+        }
+        usleep(200000);
+    }
+    assert(False);
+
+    gotevent:
+    XNextEvent(display, &event);
+    assert(event.type == SelectionNotify);
 }
 
 int main(void) {
@@ -200,6 +271,9 @@ int main(void) {
     }
     if(strcmp(buffer, "01100\n") == 0) {
         _011000_multiple_large_transfers();
+    }
+    if(strcmp(buffer, "01200\n") == 0) {
+        _012000_read_and_steal();
     }
 
     return 0;

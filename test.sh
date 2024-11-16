@@ -29,3 +29,4 @@ echo "00800" | ./test
 echo "00900" | ./test
 echo "01000" | ./test
 echo "01100" | ./test
+echo "01200" | ./test
