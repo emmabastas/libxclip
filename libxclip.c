@@ -869,12 +869,18 @@ int libxclip_get(Display *display,
     printf("Called XConvertSelection, waiting for an XEvent.\n");
     #endif
 
+
+    // In the case that the caller specified a timeout we will use this
+    // struct to define the point in time where if we pass it we should
+    // timeout.
+    // TODO: Should we set the timeout at the start of the function?
+    struct timespec timeout;
+
     // Wait for a response
     XEvent event;
     if (options == NULL || options->timeout == 0) {
         XNextEvent(display, &event);
     } else {
-        struct timespec timeout;
         x_millisecs_from_now(options->timeout, &timeout);
         int ret = XNextEvent_timeout(display, &event, timeout);
 
@@ -936,12 +942,29 @@ int libxclip_get(Display *display,
     // The selection owner says the selection is too large to send in one go,
     // we got to do incermental transfers.
     if (property_type == XInternAtom(display, "INCR", False)) {
-        // We signal to the selection owner that we're ready to recive a chunk
-        // by deleting the contents of the property were we've told the
-        // selection owner to put their response data into
+        while (True) {
+            // We signal to the selection owner that we're ready to recive a
+            // chunk  by deleting the contents of the property were we've told
+            // the selection owner to put their response data into.
+            XDeleteProperty(display, window, property);
 
-        // TODO
-        assert(False);
+
+            // Wait for a response
+            XEvent event;
+            if (options == NULL || options->timeout == 0) {
+                XNextEvent(display, &event);
+            } else {
+                int ret = XNextEvent_timeout(display, &event, timeout);
+
+                // Did we timeout?
+                if (ret == -1) {
+                    return -1;
+                }
+            }
+
+            // TODO: implement
+            assert(False);
+        }
     }
 
     if (property_type != target) {
