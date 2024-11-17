@@ -898,6 +898,17 @@ int libxclip_get(Display *display,
                        &bytes_after,
                        &out_buffer);
 
+    // The selection owner says the selection is too large to send in one go,
+    // we got to do incermental transfers.
+    if (property_type == XInternAtom(display, "INCR", False)) {
+        // We signal to the selection owner that we're ready to recive a chunk
+        // by deleting the contents of the property were we've told the
+        // selection owner to put their response data into
+
+        // TODO
+        assert(False);
+    }
+
     if (property_type != target) {
         #ifdef DEBUG
         printf("Unexpected property_type atom \"%s\".\n",
