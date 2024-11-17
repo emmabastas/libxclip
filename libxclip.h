@@ -18,6 +18,13 @@
 #include <unistd.h>
 #include <X11/Xlib.h>
 typedef struct PutOptions PutOptions;
+struct GetOptions {
+    Atom selection;
+    int timeout;  // in milliseconds
+};
 int libxclip_put(Display *display, char *data, size_t len, PutOptions *options);
+int libxclip_targets(Display *display,
+                     Atom **targets_ret,
+                     unsigned long *nitems_ret,
+                     struct GetOptions *options);
 #endif  // LIBXCLIP_H_
-

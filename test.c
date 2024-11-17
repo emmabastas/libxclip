@@ -232,6 +232,45 @@ void _012000_read_and_steal() {
     printf("Success!\n");
 }
 
+void _100000_simple_targets() {
+    printf("\n\n=== libxclip_targets can retrive the targets from xclip. ===\n");
+    system("echo foo | xclip -i -selection CLIPBOARD -target FOO");
+    Atom *targets;
+    unsigned long nitems;
+    libxclip_targets(display, &targets, &nitems, NULL);
+
+    assert(nitems == 2);
+    assert(*targets == XInternAtom(display, "TARGETS", False));
+    targets ++;
+    assert(*targets == XInternAtom(display, "FOO", False));
+    printf("Sucess!\n");
+}
+
+void _101000_targets_timeout() {
+    printf("\n\n=== libxclip_targets timeouts when specificed. ===\n");
+
+    printf("Setting the selection owner to a unresponsive window.\n");
+    Window window = XCreateSimpleWindow(display,
+                                        DefaultRootWindow(display),
+                                        0, 0, 1, 1, 0, 0, 0);
+    XSetSelectionOwner(display, a_clipboard, window, CurrentTime);
+    XSync(display, False);
+
+    Atom *targets;
+    unsigned long nitems;
+    struct GetOptions options = {};
+    options.timeout = 100;
+
+    printf("Running libxclip with a timeout of 100 millisec.\n");
+    int ret = libxclip_targets(display, &targets, &nitems, &options);
+
+    assert(ret != 0);
+    assert(targets == NULL);
+    assert(nitems == 0);
+
+    printf("libxclip_targets timed out!\n");
+}
+
 int main(void) {
     display = XOpenDisplay(NULL);
     a_clipboard = XInternAtom(display, "CLIPBOARD", False);
@@ -276,6 +315,13 @@ int main(void) {
     }
     if(strcmp(buffer, "01200\n") == 0) {
         _012000_read_and_steal();
+    }
+
+    if(strcmp(buffer, "10000\n") == 0) {
+        _100000_simple_targets();
+    }
+    if(strcmp(buffer, "10100\n") == 0) {
+        _101000_targets_timeout();
     }
 
     return 0;

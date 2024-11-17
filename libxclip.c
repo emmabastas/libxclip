@@ -19,6 +19,8 @@
 #include <assert.h>     // for assert
 #include <unistd.h>     // for fork, read, write and pipe
 #include <stdio_ext.h>  // for __fpurge
+#include <time.h>
+#include <string.h>
 #include <X11/Xlib.h>
 
 // #define DEBUG
@@ -610,3 +612,166 @@ int libxclip_put(Display *display,
 
     return 0;
 }
+
+int libxclip_targets(Display *display,
+                     Atom **targets_ret,
+                     unsigned long *nitems_ret,
+                     struct GetOptions *options) {
+    // re-open the connextion to X. I'm not sure we need this, we're not doing
+    // multithreading or anything, by I _think_ getting a new connection is wise
+    // because we only want xevents related to us.
+    display = XOpenDisplay(XDisplayString(display));
+
+    // A dummy window to which we can attach a property where the selection
+    // owner can place their response.
+    Window window = XCreateSimpleWindow(display,
+                                        DefaultRootWindow(display),
+                                        0, 0, 1, 1, 0, 0, 0);
+
+    // The property where the selection owner can place their response.
+    Atom property = XInternAtom(display, "LIBXCLIP_OUT", False);
+
+    Atom selection;
+    if (options == NULL || options->selection == 0) {
+        selection = XInternAtom(display, "CLIPBOARD", False);
+    } else {
+        selection = options->selection;
+    }
+
+    // Make the request
+    XConvertSelection(display,
+                      selection,
+                      XInternAtom(display, "TARGETS", False),
+                      property,
+                      window,
+                      CurrentTime);
+
+    #ifdef DEBUG
+    printf("Called XConvertSelection, waiting for an XEvent.\n");
+    #endif
+
+    // Wait for a response
+    XEvent event;
+    if (options == NULL || options->timeout == 0) {
+        XNextEvent(display, &event);
+    } else {
+        struct timespec ts_start;
+        struct timespec ts_end;
+        struct timespec ts_current;
+
+        clock_gettime(CLOCK_MONOTONIC, &ts_start);
+        ts_end = ts_start;
+        ts_end.tv_sec += options->timeout / 1000;
+        ts_end.tv_nsec += (options->timeout % 1000) * 1000000;
+
+        while (True) {
+            if (XPending(display) > 0) {
+                XNextEvent(display, &event);
+                break;
+            }
+
+            clock_gettime(CLOCK_MONOTONIC, &ts_current);
+            if (ts_current.tv_sec > ts_end.tv_sec) {
+                return -1;
+            }
+            if (ts_current.tv_sec == ts_end.tv_sec
+                && ts_current.tv_nsec > ts_end.tv_nsec) {
+                return -1;
+            }
+
+            usleep(1000);
+        }
+    }
+
+    #ifdef DEBUG
+    printf("We got an XEvent.\n");
+    #endif
+
+    if (event.type != SelectionNotify) {
+        #ifdef DEBUG
+        printf("We got an event with type %d which is not a SelectionNotify, "
+               "returning error.\n", event.type);
+        #endif
+        return -1;
+    }
+
+    if (event.xselection.property == None) {
+        #ifdef DEBUG
+        printf("The SelectionNotify response we got gave None as a property, "
+               "somehow they're not happy with our request. Returning with "
+               "error.\n");
+        #endif
+        return -1;
+    }
+
+    if (event.xselection.property != property) {
+        #ifdef DEBUG
+        printf("The SelectionNotify response we got does not pertain to our "
+               "prpoerty. Returning with error.\n");
+        #endif
+        return -1;
+    }
+
+    Atom property_type;
+    int format;
+    unsigned long nitems;
+    unsigned long bytes_after;
+    unsigned char *out_buffer;
+
+    // find the size and format of the data in property
+    XGetWindowProperty(display,
+                       window,
+                       property,
+                       0,
+                       0,
+                       False,
+                       AnyPropertyType,
+                       &property_type,
+                       &format,
+                       &nitems,
+                       &bytes_after,
+                       &out_buffer);
+
+    if (property_type != XInternAtom(display, "ATOM", False)) {
+        #ifdef DEBUG
+        printf("Unexpected property_type atom \"%s\".\n",
+               XGetAtomName(display, property_type));
+        #endif
+        return -1;
+    }
+
+    if (format != 32) {
+        #ifdef DEBUG
+        printf("Unexpected format %d.\n", format);
+        #endif
+        return -1;
+    }
+
+    // Actually retrive the data
+    XGetWindowProperty(display,
+                       window,
+                       property,
+                       0,
+                       bytes_after / 4,
+                       False,
+                       AnyPropertyType,
+                       &property_type,
+                       &format,
+                       &nitems,
+                       &bytes_after,
+                       &out_buffer);
+
+    // Copy the retrived data to a memory block for the caller to access.
+    unsigned char *copied_buffer = malloc(nitems * sizeof(long));
+    memcpy(copied_buffer, out_buffer, nitems * sizeof(long));
+    XFree(out_buffer);
+
+    *targets_ret = (Atom *) copied_buffer;
+    *nitems_ret = nitems;
+
+    return 0;
+}
+
+// char *libxclip_get(Display *display, GetOptions *options) {
+//
+// }
