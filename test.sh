@@ -33,3 +33,13 @@ echo "01200" | ./test
 
 echo "10000" | ./test
 echo "10100" | ./test
+
+echo "20000" | ./test
+echo "20050" | ./test
+echo "20060" | ./test
+echo "20100" | ./test
+echo "20200" | ./test
+echo "20300" | ./test
+echo "20400" | ./test
+echo "20500" | ./test
+echo "20600" | ./test

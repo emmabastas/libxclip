@@ -271,6 +271,156 @@ void _101000_targets_timeout() {
     printf("libxclip_targets timed out!\n");
 }
 
+void _200000_simple_get() {
+    printf("\n\n=== libxclip_get can retrive from xclip. ===\n");
+    printf("printf foo | xclip -i -selection clipboard\n");
+    system("printf foo | xclip -i -selection clipboard");
+
+    char *data;
+    size_t size;
+    int ret = libxclip_get(display, &data, &size, NULL);
+
+    printf("Retrived \"");
+    fwrite(data, 1, size, stdout);
+    printf("\".\n");
+
+    assert(ret == 0);
+}
+
+void _20050_empty_get() {
+    printf("\n\n=== In the selection has empty data libxclip_get still considers this a success. ===\n");
+
+    printf("printf '' | xclip -i -selection clipboard\n");
+    system("printf '' | xclip -i -selection clipboard");
+
+    char *data;
+    size_t size;
+    int ret = libxclip_get(display, &data, &size, NULL);
+
+    assert(ret == 0);
+    assert(size == 0);
+}
+
+void _20060_wierd_data() {
+    printf("\n\n=== libxclip_get can handle 'wierd' data. ===\n");
+    char *in_data = "\x00\x01\x02\x03\x04\x05\x06\a\b\t\n\x0a\v\f\r\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e !\"#$%&\'()*+,-./0123456789:;<=>\?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\127åäöãüαβγℕℤ😃";
+    size_t in_size = 160;
+
+    libxclip_put(display, in_data, in_size, NULL);
+
+    char *out_data;
+    size_t out_size;
+
+    int ret = libxclip_get(display, &out_data, &out_size, NULL);
+
+    assert(ret == 0);
+    assert(out_size == in_size);
+    for (int i = 0; i < in_size; i ++) {
+        assert(in_data[i] == out_data[i]);
+    }
+
+    printf("Ok.\n");
+}
+
+void _201000_custom_target() {
+    printf("\n\n=== libxclip_get handles target option. ===\n");
+    printf("printf foo | xclip -i -selection clipboard -target FOO\n");
+    system("printf foo | xclip -i -selection clipboard -target FOO");
+
+    char *data;
+    size_t size;
+    struct GetOptions options = {};
+    options.target = XInternAtom(display, "FOO", False);
+    int ret = libxclip_get(display, &data, &size, &options);
+
+    assert(ret == 0);
+
+    printf("Retrived \"");
+    fwrite(data, 1, size, stdout);
+    printf("\".\n");
+}
+
+void _202000_no_selection_owner() {
+    printf("\n\n=== libxclip_get returns with an error if there's no selection owner. ===\n");
+    char *data;
+    size_t size;
+    int ret = libxclip_get(display, &data, &size, NULL);
+    assert(ret != 0);
+    printf("Ok.\n");
+}
+
+void _203000_unsupported_target() {
+    printf("\n\n=== libxclip_get returns with an error if it requested a target that the current selection owner does not support. ===\n");
+
+    printf("printf foo | xclip -i -selection CLIPBOARD -target FOO\n");
+    system("printf foo | xclip -i -selection CLIPBOARD -target FOO");
+
+    char *data;
+    size_t size;
+    struct GetOptions options = {};
+    options.target = XInternAtom(display, "BAR", False);
+    int ret = libxclip_get(display, &data, &size, &options);
+    assert(ret != 0);
+    printf("Ok.\n");
+}
+
+void _204000_invalid_selection() {
+    printf("\n\n=== libxclip_get returns with an error the user specificies an invalid selection. ===\n");
+
+    char *data;
+    size_t size;
+    struct GetOptions options = {};
+    options.selection = XInternAtom(display, "NOT A VALID SELECTION", False);
+    int ret = libxclip_get(display, &data, &size, &options);
+    assert(ret != 0);
+    assert(data == NULL);
+    assert(size == 0);
+    printf("Ok.\n");
+}
+
+void _205000_timeout() {
+    printf("\n\n=== libxclip_get timeouts when specificed. ===\n");
+
+    printf("Setting the selection owner to a unresponsive window.\n");
+    Window window = XCreateSimpleWindow(display,
+                                        DefaultRootWindow(display),
+                                        0, 0, 1, 1, 0, 0, 0);
+    XSetSelectionOwner(display, a_clipboard, window, CurrentTime);
+    XSync(display, False);
+
+    char *data;
+    size_t size;
+    struct GetOptions options = {};
+    options.timeout = 100;
+
+    printf("Running libxclip_get with a timeout of 100 millisec. ===\n");
+    int ret = libxclip_get(display, &data, &size, &options);
+
+    assert(ret != 0);
+    printf("libxclip_get timed out!\n");
+}
+
+void _206000_incr() {
+    printf("\n\n=== libxclip_get can handle incremental transfers. ===\n");
+
+    size_t n = 1 << 25;
+    char *large_data = malloc(n);
+    memset(large_data, '#', n);
+
+    libxclip_put(display, large_data, n, NULL);
+
+    char *out_data;
+    size_t out_size;
+
+    int ret = libxclip_get(display, &out_data, &out_size, NULL);
+
+    assert(ret == 0);
+    assert(out_size == n);
+    for (size_t i = 0; i < n; i ++) {
+        assert(large_data[i] == out_data[i]);
+    }
+}
+
 int main(void) {
     display = XOpenDisplay(NULL);
     a_clipboard = XInternAtom(display, "CLIPBOARD", False);
@@ -322,6 +472,34 @@ int main(void) {
     }
     if(strcmp(buffer, "10100\n") == 0) {
         _101000_targets_timeout();
+    }
+
+    if(strcmp(buffer, "20000\n") == 0) {
+        _200000_simple_get();
+    }
+    if(strcmp(buffer, "20050\n") == 0) {
+        _20050_empty_get();
+    }
+    if(strcmp(buffer, "20060\n") == 0) {
+        _20060_wierd_data();
+    }
+    if(strcmp(buffer, "20100\n") == 0) {
+        _201000_custom_target();
+    }
+    if(strcmp(buffer, "20200\n") == 0) {
+        _202000_no_selection_owner();
+    }
+    if(strcmp(buffer, "20300\n") == 0) {
+        _203000_unsupported_target();
+    }
+    if(strcmp(buffer, "20400\n") == 0) {
+        _204000_invalid_selection();
+    }
+    if(strcmp(buffer, "20500\n") == 0) {
+        _205000_timeout();
+    }
+    if(strcmp(buffer, "20600\n") == 0) {
+        _206000_incr();
     }
 
     return 0;

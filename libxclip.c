@@ -698,8 +698,8 @@ int libxclip_targets(Display *display,
     if (event.xselection.property == None) {
         #ifdef DEBUG
         printf("The SelectionNotify response we got gave None as a property, "
-               "somehow they're not happy with our request. Returning with "
-               "error.\n");
+               "maybe there is no selection owner, or the selection owner is "
+               "unhappy with our request. Return with error.\n");
         #endif
         return -1;
     }
