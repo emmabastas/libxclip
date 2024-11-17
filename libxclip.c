@@ -46,7 +46,8 @@ struct transfer {
 
 // Returns a transfer whose requestor_window is the one specified, or NULL of no
 // such transfer was found.
-struct transfer *get_transfer(struct transfer **head, Window requestor_window) {
+static struct transfer *
+get_transfer(struct transfer **head, Window requestor_window) {
     struct transfer *current = *head;
 
     while (current != NULL) {
@@ -62,7 +63,7 @@ struct transfer *get_transfer(struct transfer **head, Window requestor_window) {
 // Make a new transfer.
 // An invariant is that no existing transfer with that requestor_window property
 // exists already.
-void new_transfer(struct transfer **head, Window window, Atom property) {
+static void new_transfer(struct transfer **head, Window window, Atom property) {
     struct transfer *new_transfer = malloc(sizeof(struct transfer));
 
     if (new_transfer == NULL) {  // couldn't allocate memory. Pretty fatal
@@ -82,7 +83,7 @@ void new_transfer(struct transfer **head, Window window, Atom property) {
     *head = new_transfer;
 }
 
-void delete_transfer(struct transfer **head, struct transfer *transfer) {
+static void delete_transfer(struct transfer **head, struct transfer *transfer) {
     if ((*head)->requestor_window == transfer->requestor_window) {
         *head = transfer->next;
         free(transfer);
@@ -104,10 +105,10 @@ void delete_transfer(struct transfer **head, struct transfer *transfer) {
     assert(False);
 }
 
-void xclipboard_respond(XEvent request,
-                        Atom property,
-                        Atom selection,
-                        Atom target) {
+static void xclipboard_respond(XEvent request,
+                               Atom property,
+                               Atom selection,
+                               Atom target) {
     XEvent response;
 
     //  Perhaps FIXME: According to ICCCM section 2.5, we should
