@@ -914,7 +914,7 @@ int libxclip_get(Display *display,
     if (event.xselection.property != property) {
         #ifdef DEBUG
         printf("The SelectionNotify response we got does not pertain to our "
-               "prpoerty. Returning with error.\n");
+               "property. Returning with error.\n");
         #endif
         return -1;
     }
@@ -948,7 +948,6 @@ int libxclip_get(Display *display,
             // the selection owner to put their response data into.
             XDeleteProperty(display, window, property);
 
-
             // Wait for a response
             XEvent event;
             if (options == NULL || options->timeout == 0) {
@@ -962,8 +961,71 @@ int libxclip_get(Display *display,
                 }
             }
 
-            // TODO: implement
-            assert(False);
+            #ifdef DEBUG
+            printf("INCR loop: We got an XEvent.\n");
+            #endif
+
+            // Is the response a SelectionNotify?
+            if (event.type != SelectionNotify) {
+                #ifdef DEBUG
+                printf("INCR loop: We got an event with type %d which is not a "
+                       "SelectionNotify, returning error.\n",
+                       event.type);
+                #endif
+                return -1;
+            }
+
+            // Does the response have a propert?
+            if (event.xselection.property == None) {
+                #ifdef DEBUG
+                printf("INCR loop: The SelectionNotify response we got gave "
+                       "None as a property, somehow they're not happy with our "
+                       "request. Returning with error.\n");
+                #endif
+                return -1;
+            }
+
+            // Is the response property our property?
+            if (event.xselection.property != property) {
+                #ifdef DEBUG
+                printf("INCR loop: The SelectionNotify response we got does not"
+                       "pertain to our property. Returning with error.\n");
+               #endif
+                return -1;
+            }
+
+            // find the size and format of the data in property
+            XGetWindowProperty(display,
+                               window,
+                               property,
+                               0,
+                               0,
+                               False,
+                               AnyPropertyType,
+                               &property_type,
+                               &format,
+                               &nitems,
+                               &bytes_after,
+                               &out_buffer);
+
+            // Did we get an "empty" response? If so this is the selection owner
+            // signaling that the transfer is over.
+            if (bytes_after == 0) {
+                // If this isn't true then me the programmer has made some
+                // misstake
+                assert(nitems == 0);
+
+                #ifdef DEBUG
+                printf("INCR loop: We got the final response indication a "
+                       "complted transfer, returning.\n");
+                #endif
+
+                return 0;
+            }
+
+
+            // TODO: extract data
+            printf("Did an INCR loop iteration!\n");
         }
     }
 
