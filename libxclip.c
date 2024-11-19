@@ -34,6 +34,8 @@ struct PutOptions {
     char phantom;  // Just here to remove -pedantic warning
 };
 
+
+
 /*
  * Timeout related utilies
  *
@@ -103,6 +105,91 @@ static int XNextEvent_timeout(Display *display,
         usleep(1);
     }
 }
+
+
+
+/*
+ * Dynamic buffer
+ *
+ * In libxclip_get, in the scenario where selection contents is being transferd
+ * incrementally we need some sort of dynamic buffer. We implement such a
+ * dynamic buffer now.
+ *
+ * AS AN ASIDE, libxclip_get dynamically allocates one big buffer that can hold
+ * the entire selections contents, this is not very efficent considering most
+ * use-cases I imagine wouldn't need to hold on to any data. So some more
+ * appropriate methods that I can think of instead would be to have the caller
+ * supply a callback or a pipe where they can recive selection contents
+ * incrementally. If there was a very simple builtin way of saying "take this
+ * pipe and read all of it's content and give me one big buffer with the
+ * contents" then I think I would have choosen pipes over dynamically allocated
+ * buffer, because I imagine that's more efficent but still really convinient
+ * for the caller to collect all of it in case they have a more niche use-case.
+ */
+
+// TODO: It would probably be wise to add error handling in case the buffer
+//       grows too large.
+
+// The user should not meddle with the contents of the struct, only read `start`
+// and `size`.
+struct DynamicBuffer {
+    char *ptr;        // Where the buffer starts.
+    size_t size;      // How much data is stored already.
+    size_t capacity;  // Total number of bytes allocated.
+    // remaining = capacity - size
+};
+
+// TODO: Have some more inteligent strategy than increasing the size by some
+//       fixed amount.
+static const size_t DYNAMIC_BUFFER_BLOCK_SIZE = 4096 * 4;
+
+static void dynamic_buffer_new(struct DynamicBuffer *buffer_ret) {
+    char *ptr = malloc(DYNAMIC_BUFFER_BLOCK_SIZE);
+    if (ptr == NULL) {
+        // TODO: Do something with this.
+        assert(False);
+    }
+
+    buffer_ret->ptr = ptr;
+    buffer_ret->size = 0;
+    buffer_ret->capacity = DYNAMIC_BUFFER_BLOCK_SIZE;
+}
+
+// Append some data to our dynamic buffer, reallocating if we need more space
+static void dynamic_buffer_append(struct DynamicBuffer *buffer,
+                                  char *data,
+                                  size_t len) {
+    // Do we need to reallocate more space?
+    if (buffer->size + len > buffer->capacity) {
+        // our new buffer will have enough space for the new data
+        // + DYNAMIC_BUFFER_BLOCK_SIZE.
+        const size_t NEW_CAPACITY =
+            buffer->size + len + DYNAMIC_BUFFER_BLOCK_SIZE;
+
+        char *new_ptr = realloc(buffer->ptr, NEW_CAPACITY);
+        if (new_ptr == NULL) {
+            // TODO: Do something with this.
+            free(buffer->ptr);
+            assert(False);
+        }
+
+        buffer->ptr = new_ptr;
+        buffer->capacity = NEW_CAPACITY;
+    }
+
+    assert(buffer->size + len <= buffer->capacity);
+
+    // Append new data.
+    memcpy(buffer->ptr + buffer->size, data, len);
+    buffer->size += len;
+}
+
+// We do not have a free function because it on the caller to free the
+// underlying when the time commes
+// static void dynamic_buffer_free(struct DynamicBuffer *buffer) {
+//     free(buffer->ptr);
+// }
+
 
 
 // The selection we hold may be so large we have to transfer it in chunks, in
@@ -814,6 +901,8 @@ int libxclip_targets(Display *display,
                        &bytes_after,
                        &out_buffer);
 
+    assert(bytes_after == 0);
+
     // Copy the retrived data to a memory block for the caller to access.
     unsigned char *copied_buffer = malloc(nitems * sizeof(long));
     memcpy(copied_buffer, out_buffer, nitems * sizeof(long));
@@ -942,6 +1031,10 @@ int libxclip_get(Display *display,
     // The selection owner says the selection is too large to send in one go,
     // we got to do incermental transfers.
     if (property_type == XInternAtom(display, "INCR", False)) {
+        // This is the buffer where we'll add data as we recive chunks.
+        struct DynamicBuffer dynamic_buffer;
+        dynamic_buffer_new(&dynamic_buffer);
+
         while (True) {
             // We signal to the selection owner that we're ready to recive a
             // chunk  by deleting the contents of the property were we've told
@@ -957,6 +1050,7 @@ int libxclip_get(Display *display,
 
                 // Did we timeout?
                 if (ret == -1) {
+                    free(dynamic_buffer.ptr);
                     return -1;
                 }
             }
@@ -972,6 +1066,7 @@ int libxclip_get(Display *display,
                        "SelectionNotify, returning error.\n",
                        event.type);
                 #endif
+                free(dynamic_buffer.ptr);
                 return -1;
             }
 
@@ -982,6 +1077,7 @@ int libxclip_get(Display *display,
                        "None as a property, somehow they're not happy with our "
                        "request. Returning with error.\n");
                 #endif
+                free(dynamic_buffer.ptr);
                 return -1;
             }
 
@@ -991,6 +1087,7 @@ int libxclip_get(Display *display,
                 printf("INCR loop: The SelectionNotify response we got does not"
                        "pertain to our property. Returning with error.\n");
                #endif
+                free(dynamic_buffer.ptr);
                 return -1;
             }
 
@@ -1020,12 +1117,53 @@ int libxclip_get(Display *display,
                        "complted transfer, returning.\n");
                 #endif
 
+                *data_ret = dynamic_buffer.ptr;
+                *size_ret = dynamic_buffer.size;
+                // TODO realloc to shrink the buffer
+
                 return 0;
             }
 
+            if (property_type != target) {
+                #ifdef DEBUG
+                printf("INCR loop: Unexpected property_type atom \"%s\".\n",
+                       XGetAtomName(display, property_type));
+                #endif
+                free(dynamic_buffer.ptr);
+                return -1;
+            }
 
-            // TODO: extract data
+            // TODO: should we be able to handle cases when format is 16 and 32?
+            if (format != 8) {
+                #ifdef DEBUG
+                printf("INCR loop: Unexpected format %d for property data",
+                       format);
+                #endif
+                free(dynamic_buffer.ptr);
+                return -1;
+            }
+
+            // Actually retrive the data
+            XGetWindowProperty(display,
+                               window,
+                               property,
+                               0,
+                               bytes_after,
+                               False,
+                               AnyPropertyType,
+                               &property_type,
+                               &format,
+                               &nitems,
+                               &bytes_after,
+                               &out_buffer);
+
+            assert(bytes_after == 0);
+
+            dynamic_buffer_append(&dynamic_buffer, (char *) out_buffer, nitems);
+
+            #ifdef DEBUG
             printf("Did an INCR loop iteration!\n");
+            #endif
         }
     }
 
@@ -1037,9 +1175,13 @@ int libxclip_get(Display *display,
         return -1;
     }
 
-    // TODO: handle cases when format is 16 and 32.
+    // TODO: should we be able to handle cases when format is 16 and 32?
     if (format != 8) {
-        assert(False);
+        #ifdef DEBUG
+        printf("Unexpected format %d for property data",
+               format);
+        #endif
+        return -1;
     }
 
     // Actually retrive the data
