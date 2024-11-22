@@ -25,9 +25,9 @@
 #include <X11/Xatom.h>
 
 // Global variables that are setup in main an accessible to each unit test
-Display *display;                   // X connection.
-struct GetOptions default_getopts;  // initialized with default values.
-Atom a_clipboard;                   // CLIPBOARD atom.
+Display *display;                         // X connection.
+struct libxclip_getopts default_getopts;  // initialized with default values.
+Atom a_clipboard;                         // CLIPBOARD atom.
 
 void _00200_test_no_double_printing() {
     printf("\n\n=== libxclip_put doesn't cause double printing\n");
@@ -419,7 +419,7 @@ void _206000_incr() {
 
 int main(void) {
     display = XOpenDisplay(NULL);
-    libxclip_GetOptions_initialize(&default_getopts);
+    libxclip_getopts_initialize(&default_getopts);
     a_clipboard = XInternAtom(display, "CLIPBOARD", False);
 
     XSetSelectionOwner(display, a_clipboard, None, CurrentTime);

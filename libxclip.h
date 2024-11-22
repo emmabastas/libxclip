@@ -17,20 +17,23 @@
 #define LIBXCLIP_H_
 #include <unistd.h>
 #include <X11/Xlib.h>
-typedef struct PutOptions PutOptions;
-struct GetOptions {
+typedef struct libxclip_putopts libxclip_putopts;
+struct libxclip_getopts {
     Atom selection;
     Atom target;
     int timeout;  // in milliseconds
 };
-void libxclip_GetOptions_initialize(struct GetOptions *options);
-int libxclip_put(Display *display, char *data, size_t len, PutOptions *options);
+void libxclip_getopts_initialize(struct libxclip_getopts *options);
+int libxclip_put(Display *display,
+                 char *data,
+                 size_t len,
+                 libxclip_putopts *options);
 int libxclip_targets(Display *display,
                      Atom **targets_ret,
                      unsigned long *nitems_ret,
-                     struct GetOptions *options);
+                     struct libxclip_getopts *options);
 int libxclip_get(Display *display,
                  char **data_ret,
                  size_t *size_ret,
-                 struct GetOptions *options);
+                 struct libxclip_getopts *options);
 #endif  // LIBXCLIP_H_

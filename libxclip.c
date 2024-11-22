@@ -30,7 +30,7 @@
 #include <stdio.h>
 #endif
 
-struct PutOptions {
+struct libxclip_putopts {
     char phantom;  // Just here to remove -pedantic warning
 };
 
@@ -268,9 +268,9 @@ static void delete_transfer(struct transfer **head, struct transfer *transfer) {
 
 
 /*
- * Initializer for GetOptions
+ * Initializer for libxclip_getotpts
  */
-void libxclip_GetOptions_initialize(struct GetOptions *options) {
+void libxclip_getopts_initialize(struct libxclip_getopts *options) {
     options->selection = None;  // None = CLIPBOARD
     options->target = None;     // None = UTF8_STRING
     options->timeout = -1;      // -1   = no timeout
@@ -329,7 +329,7 @@ static void xclipboard_respond(XEvent request,
 int libxclip_put(Display *display,
                  char *data,
                  size_t len,
-                 PutOptions *options) {
+                 libxclip_putopts *options) {
     // The first thing we do, in an attempt to avoid race conditions,
     // missed events, and so on, is to create the child process and then have
     // the parent process freeze until the child process has performed all it's
@@ -787,7 +787,7 @@ int libxclip_put(Display *display,
 int libxclip_targets(Display *display,
                      Atom **targets_ret,
                      unsigned long *nitems_ret,
-                     struct GetOptions *options) {
+                     struct libxclip_getopts *options) {
     // re-open the connextion to X. I'm not sure we need this, we're not doing
     // multithreading or anything, by I _think_ getting a new connection is wise
     // because we only want xevents related to us.
@@ -930,7 +930,7 @@ int libxclip_targets(Display *display,
 int libxclip_get(Display *display,
                  char **data_ret,
                  size_t *size_ret,
-                 struct GetOptions *options) {
+                 struct libxclip_getopts *options) {
     // re-open the connextion to X. I'm not sure we need this, we're not doing
     // multithreading or anything, by I _think_ getting a new connection is wise
     // because we only want xevents related to us.
