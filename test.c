@@ -286,38 +286,39 @@ void _101000_targets_timeout() {
     printf("libxclip_targets timed out!\n");
 }
 
-void _200000_simple_get() {
-    printf("\n\n=== libxclip_get can retrive from xclip. ===\n");
-    printf("printf foo | xclip -i -selection clipboard\n");
+// libxclip_get can retrive from xclip.
+void test_libxclip_get_simple(CuTest *tc) {
+    initialize();
+
     system("printf foo | xclip -i -selection clipboard");
 
     char *data;
     size_t size;
     int ret = libxclip_get(display, &data, &size, NULL);
 
-    printf("Retrived \"");
-    fwrite(data, 1, size, stdout);
-    printf("\".\n");
-
-    assert(ret == 0);
+    CuAssertIntEquals(tc, 0, ret);
+    CuAssertIntEquals(tc, strlen("foo"), size);
+    CuAssertBytesEquals(tc, "foo", data, size);
 }
 
-void _20050_empty_get() {
-    printf("\n\n=== In the selection has empty data libxclip_get still considers this a success. ===\n");
+// In the selection has empty data libxclip_get still considers this a success.
+void test_libxclip_get_empty(CuTest *tc) {
+    initialize();
 
-    printf("printf '' | xclip -i -selection clipboard\n");
     system("printf '' | xclip -i -selection clipboard");
 
     char *data;
     size_t size;
     int ret = libxclip_get(display, &data, &size, NULL);
 
-    assert(ret == 0);
-    assert(size == 0);
+    CuAssertIntEquals(tc, 0, ret);
+    CuAssertIntEquals(tc, 0, size);
 }
 
-void _20060_wierd_data() {
-    printf("\n\n=== libxclip_get can handle 'wierd' data. ===\n");
+// libxclip_get can handle 'wierd' data.
+void test_libxclip_get_wierd_data(CuTest *tc) {
+    initialize();
+
     char *in_data = "\x00\x01\x02\x03\x04\x05\x06\a\b\t\n\x0a\v\f\r\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e !\"#$%&\'()*+,-./0123456789:;<=>\?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\127åäöãüαβγℕℤ😃";
     size_t in_size = 160;
 
@@ -328,18 +329,15 @@ void _20060_wierd_data() {
 
     int ret = libxclip_get(display, &out_data, &out_size, NULL);
 
-    assert(ret == 0);
-    assert(out_size == in_size);
-    for (int i = 0; i < in_size; i ++) {
-        assert(in_data[i] == out_data[i]);
-    }
-
-    printf("Ok.\n");
+    CuAssertIntEquals(tc, 0, ret);
+    CuAssertIntEquals(tc, in_size, out_size);
+    CuAssertBytesEquals(tc, in_data, out_data, in_size);
 }
 
-void _201000_custom_target() {
-    printf("\n\n=== libxclip_get handles target option. ===\n");
-    printf("printf foo | xclip -i -selection clipboard -target FOO\n");
+// libxclip_get handles target option.
+void test_libxclip_get_custom_target(CuTest *tc) {
+    initialize();
+
     system("printf foo | xclip -i -selection clipboard -target FOO");
 
     char *data;
@@ -347,51 +345,51 @@ void _201000_custom_target() {
     default_getopts.target = XInternAtom(display, "FOO", False);
     int ret = libxclip_get(display, &data, &size, &default_getopts);
 
-    assert(ret == 0);
-
-    printf("Retrived \"");
-    fwrite(data, 1, size, stdout);
-    printf("\".\n");
+    CuAssertIntEquals(tc, 0, ret);
+    CuAssertIntEquals(tc, strlen("foo"), size);
+    CuAssertBytesEquals(tc, "foo", data, size);
 }
 
-void _202000_no_selection_owner() {
-    printf("\n\n=== libxclip_get returns with an error if there's no selection owner. ===\n");
+// libxclip_get returns with an error if there's no selection owner.
+void test_libxclip_get_no_selection_owner(CuTest *tc) {
+    initialize();
+
     char *data;
     size_t size;
     int ret = libxclip_get(display, &data, &size, NULL);
-    assert(ret != 0);
-    printf("Ok.\n");
+    CuAssertTrue(tc, ret != 0);
 }
 
-void _203000_unsupported_target() {
-    printf("\n\n=== libxclip_get returns with an error if it requested a target that the current selection owner does not support. ===\n");
+// libxclip_get returns with an error if it requested a target that the current selection owner does not support.
+void test_libxclip_get_unsupported_target(CuTest *tc) {
+    initialize();
 
-    printf("printf foo | xclip -i -selection CLIPBOARD -target FOO\n");
     system("printf foo | xclip -i -selection CLIPBOARD -target FOO");
 
     char *data;
     size_t size;
     default_getopts.target = XInternAtom(display, "BAR", False);
     int ret = libxclip_get(display, &data, &size, &default_getopts);
-    assert(ret != 0);
-    printf("Ok.\n");
+    CuAssertTrue(tc, ret != 0);
 }
 
-void _204000_invalid_selection() {
-    printf("\n\n=== libxclip_get returns with an error the user specificies an invalid selection. ===\n");
+// libxclip_get returns with an error the user specificies an invalid selection.
+void test_libxclip_get_invalid_selection(CuTest *tc) {
+    initialize();
 
     char *data = NULL;
     size_t size = 0;
     default_getopts.selection = XInternAtom(display, "NOT A VALID SELECTION", False);
     int ret = libxclip_get(display, &data, &size, &default_getopts);
-    assert(ret != 0);
-    assert(data == NULL);
-    assert(size == 0);
-    printf("Ok.\n");
+    CuAssertTrue(tc, ret != 0);
+    CuAssertPtrEquals(tc, NULL, data);
+    CuAssertIntEquals(tc, 0, size);
 }
 
 // libxclip_get timeouts when specificed.
 void test_libxclip_get_timeout(CuTest *tc) {
+    initialize();
+
     Window window = XCreateSimpleWindow(display,
                                         DefaultRootWindow(display),
                                         0, 0, 1, 1, 0, 0, 0);
@@ -409,6 +407,8 @@ void test_libxclip_get_timeout(CuTest *tc) {
 
 // libxclip_get can handle incremental transfers.
 void test_libxclip_get_incremental_transfer(CuTest *tc) {
+    initialize();
+
     size_t n = 1 << 25;
     char *large_data = malloc(n);
     memset(large_data, '#', n);
@@ -430,7 +430,13 @@ void cu_test_all() {
 
     CuString *output = CuStringNew();
     CuSuite *suite = CuSuiteNew();
-
+    SUITE_ADD_TEST(suite, test_libxclip_get_simple);
+    SUITE_ADD_TEST(suite, test_libxclip_get_empty);
+    SUITE_ADD_TEST(suite, test_libxclip_get_wierd_data);
+    SUITE_ADD_TEST(suite, test_libxclip_get_custom_target);
+    SUITE_ADD_TEST(suite, test_libxclip_get_no_selection_owner);
+    SUITE_ADD_TEST(suite, test_libxclip_get_unsupported_target);
+    SUITE_ADD_TEST(suite, test_libxclip_get_invalid_selection);
     SUITE_ADD_TEST(suite, test_libxclip_get_timeout);
     SUITE_ADD_TEST(suite, test_libxclip_get_incremental_transfer);
 
@@ -487,28 +493,6 @@ int main(void) {
     }
     if(strcmp(buffer, "10100\n") == 0) {
         _101000_targets_timeout();
-    }
-
-    if(strcmp(buffer, "20000\n") == 0) {
-        _200000_simple_get();
-    }
-    if(strcmp(buffer, "20050\n") == 0) {
-        _20050_empty_get();
-    }
-    if(strcmp(buffer, "20060\n") == 0) {
-        _20060_wierd_data();
-    }
-    if(strcmp(buffer, "20100\n") == 0) {
-        _201000_custom_target();
-    }
-    if(strcmp(buffer, "20200\n") == 0) {
-        _202000_no_selection_owner();
-    }
-    if(strcmp(buffer, "20300\n") == 0) {
-        _203000_unsupported_target();
-    }
-    if(strcmp(buffer, "20400\n") == 0) {
-        _204000_invalid_selection();
     }
 
     if(strcmp(buffer, "30000\n") == 0) {
