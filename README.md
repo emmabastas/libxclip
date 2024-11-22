@@ -150,6 +150,6 @@ The source code is based off of [xclip](https://github.com/astrand/xclip) which 
 
 - [ ] Better "installation" instructions
 - [ ] Package for common Linux distros
-- [ ] Implement a `libxclip_get`?
+- [X] Implement a `libxclip_get`?
 - [ ] Proper documentation (like a man-page?)
 - [X] Do the licensing properly (add LICENSE file and license comments on top of files)
