@@ -144,7 +144,7 @@ struct DynamicBuffer {
 static const size_t DYNAMIC_BUFFER_BLOCK_SIZE = 4096 * 4;
 
 static void dynamic_buffer_new(struct DynamicBuffer *buffer_ret) {
-    char *ptr = malloc(DYNAMIC_BUFFER_BLOCK_SIZE);
+    char *ptr = calloc(DYNAMIC_BUFFER_BLOCK_SIZE, sizeof(char));
     if (ptr == NULL) {
         // TODO: Do something with this.
         assert(False);
@@ -224,7 +224,7 @@ get_transfer(struct transfer **head, Window requestor_window) {
 // An invariant is that no existing transfer with that requestor_window property
 // exists already.
 static void new_transfer(struct transfer **head, Window window, Atom property) {
-    struct transfer *new_transfer = malloc(sizeof(struct transfer));
+    struct transfer *new_transfer = calloc(1, sizeof(struct transfer));
 
     if (new_transfer == NULL) {  // couldn't allocate memory. Pretty fatal
         #ifdef DEBUG
@@ -917,7 +917,7 @@ int libxclip_targets(Display *display,
     assert(bytes_after == 0);
 
     // Copy the retrived data to a memory block for the caller to access.
-    unsigned char *copied_buffer = malloc(nitems * sizeof(long));
+    unsigned char *copied_buffer = calloc(nitems, sizeof(long));
     memcpy(copied_buffer, out_buffer, nitems * sizeof(long));
     XFree(out_buffer);
 
@@ -1212,7 +1212,7 @@ int libxclip_get(Display *display,
                        &out_buffer);
 
     // Copy the retrived data to a memory block for the caller to access.
-    unsigned char *copied_buffer = malloc(nitems);
+    unsigned char *copied_buffer = calloc(nitems, sizeof(unsigned char));
     memcpy(copied_buffer, out_buffer, nitems);
     XFree(out_buffer);
 
