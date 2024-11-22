@@ -23,3 +23,7 @@ indent_style = space
 indent_size = 4
 trim_trailing_whitespace = true
 max_line_length = 80
+
+[CuTest.{c,h}]
+indent_style = tab
+trim_trailing_whitespace = false

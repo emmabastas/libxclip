@@ -61,6 +61,9 @@ void CuAssert_Line(CuTest* tc, const char* file, int line, const char* message, 
 void CuAssertStrEquals_LineMsg(CuTest* tc, 
 	const char* file, int line, const char* message, 
 	const char* expected, const char* actual);
+void CuAssertBytesEquals_LineMsg(CuTest* tc,
+	const char* file, int line, const char* message, 
+	const char* expected, const char* actual, size_t nbytes);
 void CuAssertIntEquals_LineMsg(CuTest* tc, 
 	const char* file, int line, const char* message, 
 	int expected, int actual);
@@ -79,6 +82,8 @@ void CuAssertPtrEquals_LineMsg(CuTest* tc,
 
 #define CuAssertStrEquals(tc,ex,ac)           CuAssertStrEquals_LineMsg((tc),__FILE__,__LINE__,NULL,(ex),(ac))
 #define CuAssertStrEquals_Msg(tc,ms,ex,ac)    CuAssertStrEquals_LineMsg((tc),__FILE__,__LINE__,(ms),(ex),(ac))
+#define CuAssertBytesEquals(tc,ex,ac,size)    CuAssertBytesEquals_LineMsg((tc),__FILE__,__LINE__,NULL,(ex),(ac),(size))
+#define CuAssertBytesEquals_Msg(tc,ms,ex,ac,size) CuAssertBytesEquals_LineMsg((tc),__FILE__,__LINE__,(ms),(ex),(ac),(size))
 #define CuAssertIntEquals(tc,ex,ac)           CuAssertIntEquals_LineMsg((tc),__FILE__,__LINE__,NULL,(ex),(ac))
 #define CuAssertIntEquals_Msg(tc,ms,ex,ac)    CuAssertIntEquals_LineMsg((tc),__FILE__,__LINE__,(ms),(ex),(ac))
 #define CuAssertDblEquals(tc,ex,ac,dl)        CuAssertDblEquals_LineMsg((tc),__FILE__,__LINE__,NULL,(ex),(ac),(dl))

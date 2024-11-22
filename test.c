@@ -422,10 +422,7 @@ void test_libxclip_get_incremental_transfer(CuTest *tc) {
 
     CuAssertIntEquals(tc, 0, ret);
     CuAssertIntEquals(tc, n, out_size);
-
-    for (size_t i = 0; i < n; i ++) {
-        CuAssertIntEquals(tc, large_data[i], out_data[i]);
-    }
+    CuAssertBytesEquals(tc, large_data, out_data, n);
 }
 
 void cu_test_all() {

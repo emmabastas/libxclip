@@ -202,7 +202,40 @@ void CuAssertStrEquals_LineMsg(CuTest* tc, const char* file, int line, const cha
 	CuFailInternal(tc, file, line, &string);
 }
 
-void CuAssertIntEquals_LineMsg(CuTest* tc, const char* file, int line, const char* message, 
+void CuAssertBytesEquals_LineMsg(CuTest* tc, const char* file, int line, const char* message,
+	const char* expected, const char* actual, size_t nbytes)
+{
+	CuString string;
+	char buf[64];
+	size_t i = 0;
+	for(;i < nbytes; i++) {
+	    if (expected[i] != actual[i]) {
+	        goto assert_chars_equal_fail;
+	    }
+	}
+	return;
+
+ assert_chars_equal_fail:
+	CuStringInit(&string);
+	if (message != NULL)
+	{
+		CuStringAppend(&string, message);
+		CuStringAppend(&string, ": ");
+	}
+	CuStringAppend(&string, "expected binary blob to match but they differ at index  ");
+	snprintf(buf, 64, "%zu", i);
+	CuStringAppend(&string, buf);
+	CuStringAppend(&string, " expected (hexadecimal) <");
+	snprintf(buf, 64, "0x%08x", expected[i]);
+	CuStringAppend(&string, buf);
+	CuStringAppend(&string, "> but was <");
+	snprintf(buf, 64, "0x%08x", actual[i]);
+	CuStringAppend(&string, buf);
+	CuStringAppend(&string, ">");
+	CuFailInternal(tc, file, line, &string);
+}
+
+void CuAssertIntEquals_LineMsg(CuTest* tc, const char* file, int line, const char* message,
 	int expected, int actual)
 {
 	char buf[STRING_MAX];
