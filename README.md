@@ -146,7 +146,7 @@ Yes please :-) If you want to implement some feature and so on, please don't hes
 
 The source code is based off of [xclip](https://github.com/astrand/xclip) which is licensed under GNU GPLv2 or later. The code in this repository is (re)licensed under GNU GPLv3 or later.
 
-The files `CuTest.c` and `CuTest.h` are from the C unit testing framework [CuTest](https://cutest.sourceforge.net/) and are lcensed under the following terms
+The files `CuTest.c` and `CuTest.h` are from the C unit testing framework [CuTest](https://cutest.sourceforge.net/) and are licensed (including small additions by me) under the following terms.
 
 ```
 LICENSE
