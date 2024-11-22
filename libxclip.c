@@ -265,6 +265,19 @@ static void delete_transfer(struct transfer **head, struct transfer *transfer) {
     assert(False);
 }
 
+
+
+/*
+ * Initializer for GetOptions
+ */
+void libxclip_GetOptions_initialize(struct GetOptions *options) {
+    options->selection = None;  // None = CLIPBOARD
+    options->target = None;     // None = UTF8_STRING
+    options->timeout = -1;      // -1   = no timeout
+}
+
+
+
 static void xclipboard_respond(XEvent request,
                                Atom property,
                                Atom selection,
@@ -933,14 +946,14 @@ int libxclip_get(Display *display,
     Atom property = XInternAtom(display, "LIBXCLIP_OUT", False);
 
     Atom selection;
-    if (options == NULL || options->selection == 0) {
+    if (options == NULL || options->selection == None) {
         selection = XInternAtom(display, "CLIPBOARD", False);
     } else {
         selection = options->selection;
     }
 
     Atom target;
-    if (options == NULL || options->target == 0) {
+    if (options == NULL || options->target == None) {
         target = XInternAtom(display, "UTF8_STRING", False);
     } else {
         target = options->target;
@@ -967,7 +980,7 @@ int libxclip_get(Display *display,
 
     // Wait for a response
     XEvent event;
-    if (options == NULL || options->timeout == 0) {
+    if (options == NULL || options->timeout == -1) {
         XNextEvent(display, &event);
     } else {
         x_millisecs_from_now(options->timeout, &timeout);

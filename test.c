@@ -24,11 +24,10 @@
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 
-Display *display;
-
-char *data;
-
-Atom a_clipboard;
+// Global variables that are setup in main an accessible to each unit test
+Display *display;                   // X connection.
+struct GetOptions default_getopts;  // initialized with default values.
+Atom a_clipboard;                   // CLIPBOARD atom.
 
 void _00200_test_no_double_printing() {
     printf("\n\n=== libxclip_put doesn't cause double printing\n");
@@ -68,7 +67,7 @@ void _00300_test_no_missed_events_in_begining() {
 
 void _00400_test_simple_data() {
     printf("\n\n=== libxclip_put with some simple data ===\n");
-    data = "Foobarbaz";
+    char *data = "Foobarbaz";
     printf("libxclip_put with \"%s\"\n", data);
     libxclip_put(display, data, strlen(data), NULL);
     printf("> xclip -o -selection clipboard 2>&1: ");
@@ -78,7 +77,7 @@ void _00400_test_simple_data() {
 
 void _00500_test_wierd_data() {
     printf("\n\n=== libxclip_put with wierd data ===\n");
-    data = "\x00\x01\x02\x03\x04\x05\x06\a\b\t\n\x0a\v\f\r\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e !\"#$%&\'()*+,-./0123456789:;<=>\?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\127åäöãüαβγℕℤ😃";
+    char *data = "\x00\x01\x02\x03\x04\x05\x06\a\b\t\n\x0a\v\f\r\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e !\"#$%&\'()*+,-./0123456789:;<=>\?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\127åäöãüαβγℕℤ😃";
     printf("libxclip_put with \"");
     fwrite(data, 1, 160, stdout);
     printf("\"\n");
@@ -256,13 +255,12 @@ void _101000_targets_timeout() {
     XSetSelectionOwner(display, a_clipboard, window, CurrentTime);
     XSync(display, False);
 
-    Atom *targets;
-    unsigned long nitems;
-    struct GetOptions options = {};
-    options.timeout = 100;
+    Atom *targets = NULL;
+    unsigned long nitems = 0;
+    default_getopts.timeout = 100;
 
     printf("Running libxclip with a timeout of 100 millisec.\n");
-    int ret = libxclip_targets(display, &targets, &nitems, &options);
+    int ret = libxclip_targets(display, &targets, &nitems, &default_getopts);
 
     assert(ret != 0);
     assert(targets == NULL);
@@ -329,9 +327,8 @@ void _201000_custom_target() {
 
     char *data;
     size_t size;
-    struct GetOptions options = {};
-    options.target = XInternAtom(display, "FOO", False);
-    int ret = libxclip_get(display, &data, &size, &options);
+    default_getopts.target = XInternAtom(display, "FOO", False);
+    int ret = libxclip_get(display, &data, &size, &default_getopts);
 
     assert(ret == 0);
 
@@ -357,9 +354,8 @@ void _203000_unsupported_target() {
 
     char *data;
     size_t size;
-    struct GetOptions options = {};
-    options.target = XInternAtom(display, "BAR", False);
-    int ret = libxclip_get(display, &data, &size, &options);
+    default_getopts.target = XInternAtom(display, "BAR", False);
+    int ret = libxclip_get(display, &data, &size, &default_getopts);
     assert(ret != 0);
     printf("Ok.\n");
 }
@@ -367,11 +363,10 @@ void _203000_unsupported_target() {
 void _204000_invalid_selection() {
     printf("\n\n=== libxclip_get returns with an error the user specificies an invalid selection. ===\n");
 
-    char *data;
-    size_t size;
-    struct GetOptions options = {};
-    options.selection = XInternAtom(display, "NOT A VALID SELECTION", False);
-    int ret = libxclip_get(display, &data, &size, &options);
+    char *data = NULL;
+    size_t size = 0;
+    default_getopts.selection = XInternAtom(display, "NOT A VALID SELECTION", False);
+    int ret = libxclip_get(display, &data, &size, &default_getopts);
     assert(ret != 0);
     assert(data == NULL);
     assert(size == 0);
@@ -390,11 +385,10 @@ void _205000_timeout() {
 
     char *data;
     size_t size;
-    struct GetOptions options = {};
-    options.timeout = 100;
+    default_getopts.timeout = 100;
 
     printf("Running libxclip_get with a timeout of 100 millisec. ===\n");
-    int ret = libxclip_get(display, &data, &size, &options);
+    int ret = libxclip_get(display, &data, &size, &default_getopts);
 
     assert(ret != 0);
     printf("libxclip_get timed out!\n");
@@ -419,10 +413,13 @@ void _206000_incr() {
     for (size_t i = 0; i < n; i ++) {
         assert(large_data[i] == out_data[i]);
     }
+
+    printf("Ok.\n");
 }
 
 int main(void) {
     display = XOpenDisplay(NULL);
+    libxclip_GetOptions_initialize(&default_getopts);
     a_clipboard = XInternAtom(display, "CLIPBOARD", False);
 
     XSetSelectionOwner(display, a_clipboard, None, CurrentTime);

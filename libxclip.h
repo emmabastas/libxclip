@@ -23,6 +23,7 @@ struct GetOptions {
     Atom target;
     int timeout;  // in milliseconds
 };
+void libxclip_GetOptions_initialize(struct GetOptions *options);
 int libxclip_put(Display *display, char *data, size_t len, PutOptions *options);
 int libxclip_targets(Display *display,
                      Atom **targets_ret,
