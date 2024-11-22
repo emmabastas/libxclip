@@ -24,10 +24,27 @@
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 
+#include "CuTest.h"
+
 // Global variables that are setup in main an accessible to each unit test
-Display *display;                         // X connection.
-struct libxclip_getopts default_getopts;  // initialized with default values.
-Atom a_clipboard;                         // CLIPBOARD atom.
+static Display *display;                         // X connection.
+static struct libxclip_getopts default_getopts;  // initialized with default values.
+static Atom a_clipboard;                         // CLIPBOARD atom.
+
+void initialize() {
+    if (display != NULL) {
+        XCloseDisplay(display);
+    }
+    display = XOpenDisplay(NULL);
+
+    default_getopts = (struct libxclip_getopts) { 0 };
+    libxclip_getopts_initialize(&default_getopts);
+
+    a_clipboard = XInternAtom(display, "CLIPBOARD", False);
+
+    XSetSelectionOwner(display, a_clipboard, None, CurrentTime);
+    XSync(display, True);
+}
 
 void _00200_test_no_double_printing() {
     printf("\n\n=== libxclip_put doesn't cause double printing\n");
@@ -373,10 +390,8 @@ void _204000_invalid_selection() {
     printf("Ok.\n");
 }
 
-void _205000_timeout() {
-    printf("\n\n=== libxclip_get timeouts when specificed. ===\n");
-
-    printf("Setting the selection owner to a unresponsive window.\n");
+// libxclip_get timeouts when specificed.
+void test_libxclip_get_timeout(CuTest *tc) {
     Window window = XCreateSimpleWindow(display,
                                         DefaultRootWindow(display),
                                         0, 0, 1, 1, 0, 0, 0);
@@ -387,16 +402,13 @@ void _205000_timeout() {
     size_t size;
     default_getopts.timeout = 100;
 
-    printf("Running libxclip_get with a timeout of 100 millisec. ===\n");
     int ret = libxclip_get(display, &data, &size, &default_getopts);
 
-    assert(ret != 0);
-    printf("libxclip_get timed out!\n");
+    CuAssertTrue(tc, ret != 0);
 }
 
-void _206000_incr() {
-    printf("\n\n=== libxclip_get can handle incremental transfers. ===\n");
-
+// libxclip_get can handle incremental transfers.
+void test_libxclip_get_incremental_transfer(CuTest *tc) {
     size_t n = 1 << 25;
     char *large_data = malloc(n);
     memset(large_data, '#', n);
@@ -408,22 +420,31 @@ void _206000_incr() {
 
     int ret = libxclip_get(display, &out_data, &out_size, NULL);
 
-    assert(ret == 0);
-    assert(out_size == n);
-    for (size_t i = 0; i < n; i ++) {
-        assert(large_data[i] == out_data[i]);
-    }
+    CuAssertIntEquals(tc, 0, ret);
+    CuAssertIntEquals(tc, n, out_size);
 
-    printf("Ok.\n");
+    for (size_t i = 0; i < n; i ++) {
+        CuAssertIntEquals(tc, large_data[i], out_data[i]);
+    }
+}
+
+void cu_test_all() {
+    printf("\n\n=== CuTest suite ===\n");
+
+    CuString *output = CuStringNew();
+    CuSuite *suite = CuSuiteNew();
+
+    SUITE_ADD_TEST(suite, test_libxclip_get_timeout);
+    SUITE_ADD_TEST(suite, test_libxclip_get_incremental_transfer);
+
+    CuSuiteRun(suite);
+    CuSuiteSummary(suite, output);
+    CuSuiteDetails(suite, output);
+    printf("%s\n", output->buffer);
 }
 
 int main(void) {
-    display = XOpenDisplay(NULL);
-    libxclip_getopts_initialize(&default_getopts);
-    a_clipboard = XInternAtom(display, "CLIPBOARD", False);
-
-    XSetSelectionOwner(display, a_clipboard, None, CurrentTime);
-    XSync(display, True);
+    initialize();
 
     char buffer[100];
     memset(buffer, 0, 100);
@@ -492,11 +513,9 @@ int main(void) {
     if(strcmp(buffer, "20400\n") == 0) {
         _204000_invalid_selection();
     }
-    if(strcmp(buffer, "20500\n") == 0) {
-        _205000_timeout();
-    }
-    if(strcmp(buffer, "20600\n") == 0) {
-        _206000_incr();
+
+    if(strcmp(buffer, "30000\n") == 0) {
+        cu_test_all();
     }
 
     return 0;

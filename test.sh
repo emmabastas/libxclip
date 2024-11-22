@@ -17,7 +17,7 @@
 
 # TODO: Maybe we should also do a test-run with -O3 in case optimizing reveals
 #       bugs to us.
-gcc -Og -Wall -Wno-unused-result -lX11 libxclip.c test.c -o test
+gcc -Og -Wall -Wno-unused-result -lX11 libxclip.c CuTest.c test.c -o test
 
 echo "00200" | ./test
 echo "00300" | ./test
@@ -43,3 +43,5 @@ echo "20300" | ./test
 echo "20400" | ./test
 echo "20500" | ./test
 echo "20600" | ./test
+
+echo "30000" | ./test
